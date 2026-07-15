@@ -64,7 +64,7 @@ if (!checksumsOnly) {
   const requiredFiles = serviceOnly ? commonFiles : commonFiles.concat(desktopFiles);
 
   for (const [source, destination] of requiredFiles) {
-    copyFileSync(join(root, source), join(assetDir, destination));
+    copyReleaseFile(join(root, source), join(assetDir, destination));
   }
 
   if (serviceOnly) {
@@ -129,6 +129,19 @@ console.log(`release assets finalized: ${assetDir}`);
 
 function sha256(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function copyReleaseFile(source, destination) {
+  if (shouldNormalizeText(destination)) {
+    const content = readFileSync(source, "utf8").replace(/\r\n?/g, "\n");
+    writeFileSync(destination, content);
+    return;
+  }
+  copyFileSync(source, destination);
+}
+
+function shouldNormalizeText(file) {
+  return /\.(sh|mjs|md|ps1)$/i.test(file);
 }
 
 function collectFilesRecursive(directory) {

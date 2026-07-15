@@ -190,6 +190,7 @@ try {
   assert.match(serviceOnlyRemoteGuide, /verify-remote-linux\.sh --url http:\/\/192\.168\.50\.93:8893/);
   assert.match(serviceOnlyRemoteGuide, /release:import-remote -- .* --service-only/);
   assert.match(serviceOnlyRemoteGuide, /release:refresh -- .* --service-only --platform linux --check/);
+  assert.equal(readFileSync(join(serviceOnlyFinalize, "install-service-linux.sh"), "utf8").includes("\r"), false);
   assert.equal(existsSync(join(serviceOnlyFinalize, "tray-verification.md")), false);
   assert.equal(existsSync(join(serviceOnlyFinalize, "agentwatch-verify-tray.mjs")), false);
   assert.equal(existsSync(join(serviceOnlyFinalize, "agentwatch-verify-tray-config.mjs")), false);
@@ -324,7 +325,7 @@ function writeFixtureProject(projectRoot) {
   write(join(projectRoot, "linux-assets", "screenshots", "linux-tray.png"), "linux tray screenshot\n");
   write(join(projectRoot, "scripts", "install-service-macos.sh"), "#!/usr/bin/env bash\n");
   write(join(projectRoot, "scripts", "uninstall-service-macos.sh"), "#!/usr/bin/env bash\n");
-  write(join(projectRoot, "scripts", "install-service-linux.sh"), "#!/usr/bin/env bash\n");
+  write(join(projectRoot, "scripts", "install-service-linux.sh"), "#!/usr/bin/env bash\r\necho install\r\n");
   write(join(projectRoot, "scripts", "uninstall-service-linux.sh"), "#!/usr/bin/env bash\n");
   write(join(projectRoot, "scripts", "install-service-windows.ps1"), "Write-Output install\n");
   write(join(projectRoot, "scripts", "uninstall-service-windows.ps1"), "Write-Output uninstall\n");
