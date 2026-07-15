@@ -1,0 +1,489 @@
+name: Package AgentWatch
+
+on:
+  workflow_dispatch:
+    inputs:
+      include_desktop:
+        description: "Also build optional desktop app packages"
+        required: false
+        default: false
+        type: boolean
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  service:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS service
+            os: macos-latest
+            platform: macos
+          - name: Windows service
+            os: windows-latest
+            platform: windows
+          - name: Linux service
+            os: ubuntu-24.04
+            platform: linux
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux service dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libssl-dev
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build service
+        run: npm run build:server
+
+      - name: Smoke service
+        run: npm run smoke:headless
+        env:
+          AGENTWATCH_HEADLESS_SMOKE_LAN_PREFLIGHT_REPORT: release-assets-service/lan-preflight-${{ matrix.platform }}.json
+
+      - name: Dry-run macOS service installer
+        if: runner.os == 'macOS'
+        run: bash scripts/install-service-macos.sh
+        env:
+          AGENTWATCH_SERVICE_DRY_RUN: "1"
+          AGENTWATCH_BINARY: src-tauri/target/release/agentwatch-server
+          HOME: ${{ runner.temp }}/agentwatch-home
+
+      - name: Dry-run Linux service installer
+        if: runner.os == 'Linux'
+        run: bash scripts/install-service-linux.sh
+        env:
+          AGENTWATCH_SERVICE_DRY_RUN: "1"
+          AGENTWATCH_BINARY: src-tauri/target/release/agentwatch-server
+          XDG_CONFIG_HOME: ${{ runner.temp }}/agentwatch-config
+
+      - name: Dry-run Windows service installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File scripts/install-service-windows.ps1 -Binary src-tauri\target\release\agentwatch-server.exe -DryRun
+
+      - name: Write service performance report
+        run: npm run bench:report:service -- release-assets-service
+        env:
+          AGENTWATCH_BENCH_REQUESTS: "30"
+
+      - name: Collect service release assets
+        run: npm run release:collect -- release-assets-service --service-only
+
+      - name: Finalize service release assets
+        run: npm run release:finalize -- release-assets-service --service-only
+
+      - name: Write service release manifest
+        run: npm run release:manifest -- release-assets-service
+
+      - name: Write service release status
+        run: |
+          npm run release:status -- release-assets-service --service-only --platform ${{ matrix.platform }} --json --output release-assets-service/release-status.json
+          npm run release:status -- release-assets-service --service-only --platform ${{ matrix.platform }} --output release-assets-service/release-status.md
+          npm run release:next-steps -- --assets release-assets-service --service-only --output release-assets-service/release-next-steps.md
+          npm run release:finalize -- release-assets-service --checksums-only --service-only
+
+      - name: Check service release readiness
+        run: npm run release:readiness -- release-assets-service --service-only --automated-only --platform ${{ matrix.platform }}
+
+      - name: Upload service release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentwatch-service-release-${{ runner.os }}
+          path: release-assets-service/*
+          if-no-files-found: error
+
+  package:
+    name: ${{ matrix.name }}
+    if: github.event_name == 'workflow_dispatch' && inputs.include_desktop
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS app
+            os: macos-latest
+            platform: macos
+            build: npm run build:mac:release
+          - name: Windows installers
+            os: windows-latest
+            platform: windows
+            build: npm run build:windows
+          - name: Linux packages
+            os: ubuntu-24.04
+            platform: linux
+            build: npm run build:linux
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            dbus \
+            dbus-x11 \
+            dbus-user-session \
+            file \
+            libayatana-appindicator3-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            patchelf \
+            rpm \
+            wget \
+            xvfb
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Check release helper scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/verify-tray-macos.sh
+          bash -n scripts/verify-tray-macos-capture.sh
+          bash -n scripts/create-macos-dmg.sh
+          bash -n scripts/verify-tray-linux.sh
+          bash -n scripts/verify-tray-linux-capture.sh
+          bash -n scripts/verify-service-macos.sh
+          bash -n scripts/verify-service-linux.sh
+          bash -n scripts/verify-remote-macos.sh
+          bash -n scripts/verify-remote-linux.sh
+          bash -n scripts/install-service-macos.sh
+          bash -n scripts/uninstall-service-macos.sh
+          bash -n scripts/install-service-linux.sh
+          bash -n scripts/uninstall-service-linux.sh
+          node --check scripts/collect-release-assets.mjs
+          node --check scripts/archive-service-release.mjs
+          node --check scripts/bundle-service-release.mjs
+          node --check scripts/bundle-desktop-release.mjs
+          node --check scripts/verify-service-archives.mjs
+          node --check scripts/verify-desktop-archives.mjs
+          node --check scripts/release-audit.mjs
+          node --check scripts/release-remote-guide.mjs
+          node --check scripts/release-tray-guide.mjs
+          node --check scripts/finalize-release-assets.mjs
+          node --check scripts/release-manifest.mjs
+          node --check scripts/release-summary.mjs
+          node --check scripts/release-status.mjs
+          node --check scripts/desktop-release-status.mjs
+          node --check scripts/write-tauri-latest-json.mjs
+          node --check scripts/release-next-steps.mjs
+          node --check scripts/service-status.mjs
+          node --check scripts/lan-preflight.mjs
+          node --check scripts/import-remote-report.mjs
+          node --check scripts/import-tray-report.mjs
+          node --check scripts/tray-manual-report.mjs
+          node --check scripts/verify-tray.mjs
+          node --check scripts/verify-tray-config.mjs
+          node --check scripts/verify-service.mjs
+          node --check scripts/verify-service-lifecycle.mjs
+          node --check scripts/verify-remote-client.mjs
+          node --check scripts/release-readiness.mjs
+          node --check scripts/smoke-headless.mjs
+
+      - name: Check Windows PowerShell helper
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $null = [scriptblock]::Create((Get-Content -Raw scripts/verify-tray-windows.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw scripts/verify-tray-windows-capture.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw scripts/verify-service-windows.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw scripts/verify-remote-windows.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw scripts/install-service-windows.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw scripts/uninstall-service-windows.ps1))
+
+      - name: Build headless server
+        run: npm run build:server
+
+      - name: Smoke headless server
+        run: npm run smoke:headless
+        env:
+          AGENTWATCH_HEADLESS_SMOKE_LAN_PREFLIGHT_REPORT: release-assets/lan-preflight-${{ matrix.platform }}.json
+
+      - name: Package
+        run: ${{ matrix.build }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Collect release assets
+        run: npm run release:collect -- release-assets
+
+      - name: Write updater fragment
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          npm run release:tauri-latest -- \
+            --input release-assets \
+            --platform ${{ matrix.platform }} \
+            --arch ${{ runner.arch }} \
+            --version "${version}" \
+            --fragment release-assets/updater-fragment.json
+
+      - name: Smoke packaged app
+        if: runner.os != 'Linux'
+        run: npm run smoke
+
+      - name: Smoke packaged app port fallback
+        if: runner.os != 'Linux'
+        run: npm run smoke:fallback
+
+      - name: Verify tray config
+        if: runner.os != 'Linux'
+        run: node scripts/verify-tray-config.mjs --output-dir release-assets
+
+      - name: Smoke packaged app under Xvfb
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run smoke
+        env:
+          AGENTWATCH_NO_TRAY: "1"
+
+      - name: Smoke packaged app port fallback under Xvfb
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run smoke:fallback
+        env:
+          AGENTWATCH_NO_TRAY: "1"
+
+      - name: Verify Linux tray config under Xvfb
+        if: runner.os == 'Linux'
+        run: dbus-run-session -- xvfb-run -a node scripts/verify-tray-config.mjs --output-dir release-assets
+
+      - name: Write performance report
+        if: runner.os != 'Linux'
+        run: npm run bench:report -- release-assets
+        env:
+          AGENTWATCH_BENCH_REQUESTS: "30"
+
+      - name: Write performance report under Xvfb
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run bench:report -- release-assets
+        env:
+          AGENTWATCH_NO_TRAY: "1"
+          AGENTWATCH_BENCH_REQUESTS: "30"
+
+      - name: Finalize release assets
+        run: npm run release:finalize -- release-assets
+
+      - name: Write release manifest
+        run: npm run release:manifest -- release-assets
+
+      - name: Write release status
+        run: |
+          npm run release:status -- release-assets --platform ${{ matrix.platform }} --json --output release-assets/release-status.json
+          npm run release:status -- release-assets --platform ${{ matrix.platform }} --output release-assets/release-status.md
+          npm run release:next-steps -- --assets release-assets --output release-assets/release-next-steps.md
+          npm run release:finalize -- release-assets --checksums-only
+
+      - name: Check release readiness
+        run: npm run release:readiness -- release-assets --automated-only --platform ${{ matrix.platform }}
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentwatch-${{ runner.os }}
+          path: src-tauri/target/release/bundle/**
+          if-no-files-found: error
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentwatch-release-${{ runner.os }}
+          path: release-assets/*
+          if-no-files-found: error
+
+  desktop-release:
+    name: Desktop Release Archives
+    if: github.event_name == 'workflow_dispatch' && inputs.include_desktop
+    needs:
+      - package
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout release scripts
+        uses: actions/checkout@v4
+
+      - name: Download desktop release assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: agentwatch-release-*
+          path: desktop-release-assets
+          merge-multiple: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Bundle desktop release archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf desktop-archives
+          mkdir -p desktop-archives
+          npm run release:bundle-desktop -- --input desktop-release-assets --output desktop-archives
+          npm run release:verify-desktop-archives -- desktop-archives
+          npm run release:desktop-status -- --archives desktop-archives --json --output desktop-archives/desktop-release-status.json
+          npm run release:desktop-status -- --archives desktop-archives --output desktop-archives/desktop-release-status.md
+          (cd desktop-archives && shasum -a 256 *.tar.gz desktop-release-status.json desktop-release-status.md > SHA256SUMS.txt)
+
+      - name: Upload desktop release archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentwatch-desktop-release-archives
+          path: desktop-archives/*
+          if-no-files-found: error
+
+  desktop-github-release:
+    name: GitHub Desktop Release
+    if: github.event_name == 'workflow_dispatch' && inputs.include_desktop && startsWith(github.ref, 'refs/tags/')
+    needs:
+      - desktop-release
+      - release
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout release scripts
+        uses: actions/checkout@v4
+
+      - name: Download desktop release archives
+        uses: actions/download-artifact@v4
+        with:
+          name: agentwatch-desktop-release-archives
+          path: desktop-archives
+
+      - name: Download desktop updater assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: agentwatch-release-*
+          path: desktop-release-assets
+          merge-multiple: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Publish desktop release archives
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          npm run release:verify-desktop-archives -- desktop-archives --require-final
+          npm run release:desktop-status -- --archives desktop-archives --check
+          (cd desktop-archives && shasum -a 256 -c SHA256SUMS.txt)
+          rm -rf desktop-updater-assets
+          mkdir -p desktop-updater-assets
+          version="${GITHUB_REF_NAME#v}"
+          npm run release:tauri-latest -- \
+            --fragments desktop-release-assets \
+            --copy-to desktop-updater-assets \
+            --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}" \
+            --version "${version}" \
+            --output desktop-updater-assets/latest.json
+          mapfile -t files < <(find desktop-archives desktop-updater-assets -maxdepth 1 -type f | sort)
+          test "${#files[@]}" -gt 0
+
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${files[@]}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" "${files[@]}" \
+              --title "${GITHUB_REF_NAME}" \
+              --generate-notes \
+              --verify-tag
+          fi
+
+  release:
+    name: GitHub Service Release
+    needs:
+      - service
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout release scripts
+        uses: actions/checkout@v4
+
+      - name: Download service release assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: agentwatch-service-release-*
+          path: service-release-assets
+          merge-multiple: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf release-assets
+          mkdir -p release-assets
+          npm run release:bundle-service -- --input service-release-assets --output release-assets
+          npm run release:verify-service-archives -- release-assets
+          shasum -a 256 release-assets/*.tar.gz > release-assets/SHA256SUMS.txt
+          mapfile -t files < <(find release-assets -maxdepth 1 -type f | sort)
+          test "${#files[@]}" -gt 0
+
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${files[@]}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" "${files[@]}" \
+              --title "${GITHUB_REF_NAME}" \
+              --generate-notes \
+              --verify-tag
+          fi

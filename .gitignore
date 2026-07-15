@@ -1,0 +1,14 @@
+.omx/
+.DS_Store
+__pycache__/
+.pytest_cache/
+data/
+release-assets/
+release-assets-*/
+desktop-archives/
+desktop-archives-*/
+desktop-archives-current/
+agentwatch-*-latest.tar.gz
+node_modules/
+src-tauri/target/
+src-tauri/gen/
