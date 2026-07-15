@@ -26,6 +26,17 @@ try {
     "--version", "0.2.0",
     "--fragment", join(root, "windows", "updater-fragment.json"),
   ]).status, 0);
+  const windowsFragmentPath = join(root, "windows", "updater-fragment.json");
+  const generatedWindowsFragment = JSON.parse(readFileSync(windowsFragmentPath, "utf8"));
+  assert.equal(
+    generatedWindowsFragment.platforms["windows-x86_64"].artifact,
+    "AgentWatch_0.2.0_x64-setup.exe",
+  );
+  generatedWindowsFragment.platforms["windows-x86_64"].artifact =
+    "D:\\a\\agentwatch\\agentwatch\\release-assets\\AgentWatch_0.2.0_x64-setup.exe";
+  generatedWindowsFragment.platforms["windows-x86_64"].signatureFile =
+    "D:\\a\\agentwatch\\agentwatch\\release-assets\\AgentWatch_0.2.0_x64-setup.exe.sig";
+  writeFileSync(windowsFragmentPath, JSON.stringify(generatedWindowsFragment, null, 2));
 
   write(join(root, "linux", "AgentWatch_0.2.0_amd64.AppImage"), "appimage");
   write(join(root, "linux", "AgentWatch_0.2.0_amd64.AppImage.sig"), "linux-signature\n");

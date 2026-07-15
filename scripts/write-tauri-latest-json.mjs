@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, relative, join, resolve } from "node:path";
 
 const args = process.argv.slice(2);
 const input = resolve(optionValue("--input") || ".");
@@ -64,8 +64,8 @@ function writeCombinedLatestJson() {
     const fragment = JSON.parse(readFileSync(fragmentPath, "utf8"));
     const fragmentDir = dirname(fragmentPath);
     for (const [platformKey, platformInfo] of Object.entries(fragment.platforms || {})) {
-      const artifactPath = resolve(fragmentDir, platformInfo.artifact);
-      const signaturePath = resolve(fragmentDir, platformInfo.signatureFile);
+      const artifactPath = resolve(fragmentDir, portableBasename(platformInfo.artifact));
+      const signaturePath = resolve(fragmentDir, portableBasename(platformInfo.signatureFile));
       if (!existsSync(artifactPath)) throw new Error(`Updater artifact missing: ${artifactPath}`);
       if (!existsSync(signaturePath)) throw new Error(`Updater signature missing: ${signaturePath}`);
       const assetName = basename(artifactPath);
@@ -135,9 +135,19 @@ function walk(root) {
 }
 
 function relativeTo(root, file) {
-  const prefix = resolve(root) + "/";
-  const resolved = resolve(file);
-  return resolved.startsWith(prefix) ? resolved.slice(prefix.length) : resolved;
+  const fromRoot = relative(resolve(root), resolve(file));
+  if (fromRoot && !fromRoot.startsWith("..") && !isAbsolute(fromRoot)) {
+    return toPortablePath(fromRoot);
+  }
+  return portableBasename(file);
+}
+
+function toPortablePath(value) {
+  return String(value).split("\\").join("/");
+}
+
+function portableBasename(value) {
+  return String(value).split(/[\\/]/).filter(Boolean).pop() || basename(String(value));
 }
 
 function normalizePlatform(value) {
