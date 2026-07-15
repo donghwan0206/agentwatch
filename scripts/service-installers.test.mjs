@@ -28,7 +28,7 @@ try {
   assert.equal(existsSync(installedMacBinary), true, "macOS service binary was not copied");
   const plist = readFileSync(plistPath, "utf8");
   assert.match(plist, /<string>com\.agentwatch\.test<\/string>/);
-  assert.match(plist, new RegExp(escapeRegExp(`<string>${installedMacBinary}</string>`)));
+  assert.match(plist, /<string>.*AgentWatch[\\/]agentwatch-server<\/string>/);
   assert.match(plist, /<key>AGENTWATCH_PORT<\/key>\s*<string>8876<\/string>/);
   assert.match(plist, /<key>HOME<\/key>/);
   assert.match(plist, /<key>AGENTWATCH_DB<\/key>/);

@@ -5,6 +5,7 @@ const workflow = readFileSync(".github/workflows/package.yml", "utf8");
 
 assert.match(workflow, /workflow_dispatch:[\s\S]*include_desktop:[\s\S]*type: boolean/, "manual desktop package toggle missing");
 assert.match(workflow, /name: \$\{\{ matrix\.name \}\}[\s\S]*macOS service[\s\S]*Windows service[\s\S]*Linux service/, "service-only matrix missing");
+assert.match(workflow, /libglib2\.0-dev/, "Linux service build must install GLib development headers required by Tauri dependencies");
 assert.match(workflow, /npm run bench:report:service -- release-assets-service/, "service-only performance report missing");
 assert.match(workflow, /Dry-run macOS service installer/, "macOS service installer dry-run missing");
 assert.match(workflow, /AGENTWATCH_SERVICE_DRY_RUN: "1"/, "service installer dry-run env missing");

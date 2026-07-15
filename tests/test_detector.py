@@ -67,9 +67,10 @@ class DetectorTest(unittest.TestCase):
             self.assertEqual(providers[key]["status"], "active", key)
 
     def test_redacts_home_and_secrets_from_commands(self):
-        command = sanitize_command("/Users/green/project codex api_key=sk-test token=abc123")
+        home = str(Path.home())
+        command = sanitize_command(f"{home}/project codex api_key=sk-test token=abc123")
 
-        self.assertNotIn("/Users/green", command)
+        self.assertNotIn(home, command)
         self.assertIn("~/project", command)
         self.assertIn("api_key=<redacted>", command)
         self.assertIn("token=<redacted>", command)
