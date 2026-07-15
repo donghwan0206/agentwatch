@@ -17,14 +17,24 @@ try {
     "--fragment", join(root, "macos", "updater-fragment.json"),
   ]).status, 0);
 
-  write(join(root, "windows", "AgentWatch_0.2.0_x64-setup.nsis.zip"), "nsis");
-  write(join(root, "windows", "AgentWatch_0.2.0_x64-setup.nsis.zip.sig"), "win-signature\n");
+  write(join(root, "windows", "AgentWatch_0.2.0_x64-setup.exe"), "nsis");
+  write(join(root, "windows", "AgentWatch_0.2.0_x64-setup.exe.sig"), "win-signature\n");
   assert.equal(run([
     "--input", join(root, "windows"),
     "--platform", "windows",
     "--arch", "X64",
     "--version", "0.2.0",
     "--fragment", join(root, "windows", "updater-fragment.json"),
+  ]).status, 0);
+
+  write(join(root, "linux", "AgentWatch_0.2.0_amd64.AppImage"), "appimage");
+  write(join(root, "linux", "AgentWatch_0.2.0_amd64.AppImage.sig"), "linux-signature\n");
+  assert.equal(run([
+    "--input", join(root, "linux"),
+    "--platform", "linux",
+    "--arch", "X64",
+    "--version", "0.2.0",
+    "--fragment", join(root, "linux", "updater-fragment.json"),
   ]).status, 0);
 
   const output = join(root, "latest.json");
@@ -44,7 +54,9 @@ try {
     "https://github.com/donghwan0206/agentwatch/releases/download/v0.2.0/AgentWatch.app.tar.gz",
   );
   assert.equal(latest.platforms["windows-x86_64"].signature, "win-signature");
-  assert.match(latest.platforms["windows-x86_64"].url, /AgentWatch_0\.2\.0_x64-setup\.nsis\.zip$/);
+  assert.match(latest.platforms["windows-x86_64"].url, /AgentWatch_0\.2\.0_x64-setup\.exe$/);
+  assert.equal(latest.platforms["linux-x86_64"].signature, "linux-signature");
+  assert.match(latest.platforms["linux-x86_64"].url, /AgentWatch_0\.2\.0_amd64\.AppImage$/);
 
   console.log("tauri latest json tests ok");
 } finally {

@@ -94,11 +94,12 @@ function collectWindowsAssets() {
   ));
   copied.push(...copyUpdaterPairs("nsis", (file) => {
     const name = basename(file).toLowerCase();
-    return name.endsWith(".zip") || name.endsWith(".zip.sig");
+    if (name.startsWith("agentwatch-server-")) return false;
+    return name.endsWith(".exe") || name.endsWith(".exe.sig");
   }));
   copied.push(...copyUpdaterPairs("msi", (file) => {
     const name = basename(file).toLowerCase();
-    return name.endsWith(".zip") || name.endsWith(".zip.sig");
+    return name.endsWith(".msi") || name.endsWith(".msi.sig");
   }));
   copied.push(copyRequired(headlessServerPath(true), "agentwatch-server-Windows.exe"));
   return copied;
@@ -115,7 +116,7 @@ function collectLinuxAssets() {
   }
   copied.push(...copyUpdaterPairs("appimage", (file) => {
     const name = basename(file);
-    return name.endsWith(".AppImage.tar.gz") || name.endsWith(".AppImage.tar.gz.sig");
+    return name.endsWith(".AppImage") || name.endsWith(".AppImage.sig");
   }));
   copied.push(copyRequired(headlessServerPath(false), "agentwatch-server-Linux"));
   return copied;

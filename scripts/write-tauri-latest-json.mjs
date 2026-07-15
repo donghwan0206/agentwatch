@@ -111,14 +111,14 @@ function selectUpdaterPair(pairs, platform) {
 
 function platformMatcher(platform, name) {
   if (platform === "darwin") return name.endsWith(".app.tar.gz");
-  if (platform === "windows") return name.endsWith(".zip");
-  if (platform === "linux") return name.endsWith(".AppImage.tar.gz");
+  if (platform === "windows") return name.endsWith(".exe") || name.endsWith(".msi");
+  if (platform === "linux") return name.endsWith(".AppImage");
   return false;
 }
 
 function priority(platform, name) {
-  if (platform === "windows" && name.includes("setup.nsis.zip")) return 0;
-  if (platform === "windows" && name.endsWith(".msi.zip")) return 1;
+  if (platform === "windows" && name.endsWith(".exe")) return 0;
+  if (platform === "windows" && name.endsWith(".msi")) return 1;
   return 0;
 }
 

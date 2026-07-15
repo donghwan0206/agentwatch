@@ -47,11 +47,9 @@ try {
   }).status, 0);
   assertFiles(windowsAssets, [
     "AgentWatch_0.2.0_x64-setup.exe",
-    "AgentWatch_0.2.0_x64-setup.nsis.zip",
-    "AgentWatch_0.2.0_x64-setup.nsis.zip.sig",
+    "AgentWatch_0.2.0_x64-setup.exe.sig",
     "AgentWatch_0.2.0_x64_en-US.msi",
-    "AgentWatch_0.2.0_x64_en-US.msi.zip",
-    "AgentWatch_0.2.0_x64_en-US.msi.zip.sig",
+    "AgentWatch_0.2.0_x64_en-US.msi.sig",
     "agentwatch-server-Windows.exe",
   ]);
   assert.equal(existsSync(join(windowsAssets, "agentwatch-server-helper.exe")), false);
@@ -64,8 +62,7 @@ try {
   }).status, 0);
   assertFiles(linuxAssets, [
     "AgentWatch_0.2.0_amd64.AppImage",
-    "AgentWatch_0.2.0_amd64.AppImage.tar.gz",
-    "AgentWatch_0.2.0_amd64.AppImage.tar.gz.sig",
+    "AgentWatch_0.2.0_amd64.AppImage.sig",
     "agentwatch_0.2.0_amd64.deb",
     "agentwatch-0.2.0-1.x86_64.rpm",
     "agentwatch-server-Linux",
@@ -277,15 +274,12 @@ function writeFixtureProject(projectRoot) {
   write(join(projectRoot, "src-tauri", "target", "release", "bundle", "macos", "AgentWatch.app.tar.gz.sig"), "macos signature");
   write(join(projectRoot, "src-tauri", "target", "release", "bundle", "dmg", "AgentWatch_0.2.0_aarch64.dmg"), "macos dmg");
   write(join(projectRoot, "src-tauri", "target", "release", "bundle", "nsis", "AgentWatch_0.2.0_x64-setup.exe"), "windows installer");
-  write(join(projectRoot, "src-tauri", "target", "release", "bundle", "nsis", "AgentWatch_0.2.0_x64-setup.nsis.zip"), "windows nsis update");
-  write(join(projectRoot, "src-tauri", "target", "release", "bundle", "nsis", "AgentWatch_0.2.0_x64-setup.nsis.zip.sig"), "windows nsis signature");
+  write(join(projectRoot, "src-tauri", "target", "release", "bundle", "nsis", "AgentWatch_0.2.0_x64-setup.exe.sig"), "windows nsis signature");
   write(join(projectRoot, "src-tauri", "target", "release", "bundle", "nsis", "agentwatch-server-helper.exe"), "ignore helper");
   write(join(projectRoot, "src-tauri", "target", "release", "bundle", "msi", "AgentWatch_0.2.0_x64_en-US.msi"), "windows msi");
-  write(join(projectRoot, "src-tauri", "target", "release", "bundle", "msi", "AgentWatch_0.2.0_x64_en-US.msi.zip"), "windows msi update");
-  write(join(projectRoot, "src-tauri", "target", "release", "bundle", "msi", "AgentWatch_0.2.0_x64_en-US.msi.zip.sig"), "windows msi signature");
+  write(join(projectRoot, "src-tauri", "target", "release", "bundle", "msi", "AgentWatch_0.2.0_x64_en-US.msi.sig"), "windows msi signature");
   write(join(projectRoot, "src-tauri", "target", "release", "bundle", "appimage", "AgentWatch_0.2.0_amd64.AppImage"), "linux appimage");
-  write(join(projectRoot, "src-tauri", "target", "release", "bundle", "appimage", "AgentWatch_0.2.0_amd64.AppImage.tar.gz"), "linux update");
-  write(join(projectRoot, "src-tauri", "target", "release", "bundle", "appimage", "AgentWatch_0.2.0_amd64.AppImage.tar.gz.sig"), "linux signature");
+  write(join(projectRoot, "src-tauri", "target", "release", "bundle", "appimage", "AgentWatch_0.2.0_amd64.AppImage.sig"), "linux signature");
   write(join(projectRoot, "src-tauri", "target", "release", "bundle", "deb", "agentwatch_0.2.0_amd64.deb"), "linux deb");
   write(join(projectRoot, "src-tauri", "target", "release", "bundle", "rpm", "agentwatch-0.2.0-1.x86_64.rpm"), "linux rpm");
   write(join(projectRoot, "src-tauri", "target", "release", "agentwatch-server.exe"), "windows server");
