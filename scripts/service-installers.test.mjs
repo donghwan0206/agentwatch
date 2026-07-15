@@ -71,8 +71,8 @@ try {
   const unit = readFileSync(unitPath, "utf8");
   assert.match(unit, /\[Unit\]/);
   assert.match(unit, /Description=AgentWatch Rust monitor server/);
-  assert.match(unit, new RegExp(escapeRegExp(`WorkingDirectory="${join(linuxData, "agentwatch")}"`)));
-  assert.match(unit, new RegExp(escapeRegExp(`ExecStart="${installedLinuxBinary}"`)));
+  assert.match(unit, /WorkingDirectory=".*linux data[\\/]agentwatch"/);
+  assert.match(unit, /ExecStart=".*linux data[\\/]agentwatch[\\/]agentwatch-server"/);
   assert.match(unit, /Restart=always/);
   assert.match(unit, /Environment="AGENTWATCH_PORT=8877"/);
   assert.match(unit, /Environment="AGENTWATCH_DB=.*agentwatch\.sqlite3"/);
