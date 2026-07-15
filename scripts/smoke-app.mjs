@@ -113,7 +113,12 @@ function findAppBinary() {
 }
 
 async function occupyDefaultPort() {
-  const server = createServer((socket) => socket.end());
+  const sockets = new Set();
+  const server = createServer((socket) => {
+    sockets.add(socket);
+    socket.once("close", () => sockets.delete(socket));
+    socket.end();
+  });
   return new Promise((resolveGuard, rejectGuard) => {
     server.once("error", (error) => {
       if (error.code === "EADDRINUSE") {
@@ -124,10 +129,14 @@ async function occupyDefaultPort() {
     });
     server.listen(8765, "0.0.0.0", () => {
       resolveGuard({
-        close: () =>
-          new Promise((resolveClose) => {
+        close: async () => {
+          for (const socket of sockets) {
+            socket.destroy();
+          }
+          await new Promise((resolveClose) => {
             server.close(() => resolveClose());
-          }),
+          });
+        },
       });
     });
   });
