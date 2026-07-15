@@ -1,6 +1,7 @@
 import unittest
 import sqlite3
 import tempfile
+from contextlib import closing
 from pathlib import Path
 
 from agent_monitor import (
@@ -80,7 +81,7 @@ class UsageTest(unittest.TestCase):
     def test_collects_daily_usage_by_turn_max(self):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "logs.sqlite"
-            with sqlite3.connect(db_path) as conn:
+            with closing(sqlite3.connect(db_path)) as conn, conn:
                 conn.execute(
                     "CREATE TABLE logs (ts INTEGER, target TEXT, feedback_log_body TEXT)"
                 )

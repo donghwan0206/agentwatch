@@ -12,6 +12,7 @@ import sqlite3
 import subprocess
 import threading
 import time
+from contextlib import closing
 from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -392,7 +393,7 @@ def collect_cached_usage(days: int = 90, ttl_seconds: int = 30) -> dict[str, Any
 def collect_codex_daily_usage(log_db: Path, since: int) -> list[dict[str, Any]]:
     by_turn: dict[str, dict[str, Any]] = {}
     try:
-        with connect_readonly(log_db) as conn:
+        with closing(connect_readonly(log_db)) as conn:
             rows = conn.execute(
                 """
                 SELECT ts, feedback_log_body
@@ -442,7 +443,7 @@ def collect_codex_daily_usage(log_db: Path, since: int) -> list[dict[str, Any]]:
 
 def collect_codex_thread_summary(state_db: Path) -> dict[str, Any]:
     try:
-        with connect_readonly(state_db) as conn:
+        with closing(connect_readonly(state_db)) as conn:
             totals = conn.execute(
                 """
                 SELECT COUNT(*) AS thread_count, COALESCE(SUM(tokens_used), 0) AS total_tokens
@@ -483,7 +484,7 @@ def collect_codex_thread_summary(state_db: Path) -> dict[str, Any]:
 
 def collect_codex_rate_limits(log_db: Path) -> list[dict[str, Any]]:
     try:
-        with connect_readonly(log_db) as conn:
+        with closing(connect_readonly(log_db)) as conn:
             rows = conn.execute(
                 """
                 SELECT ts, feedback_log_body
@@ -567,7 +568,7 @@ class SnapshotStore:
         return conn
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn, conn:
             conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS snapshots (
@@ -594,7 +595,7 @@ class SnapshotStore:
 
     def add_snapshot(self, snapshot: dict[str, Any]) -> None:
         activity = snapshot["activity"]
-        with self.lock, self._connect() as conn:
+        with self.lock, closing(self._connect()) as conn, conn:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO snapshots
@@ -613,14 +614,14 @@ class SnapshotStore:
             )
 
     def add_event(self, level: str, provider: str, message: str, ts: int | None = None) -> None:
-        with self.lock, self._connect() as conn:
+        with self.lock, closing(self._connect()) as conn, conn:
             conn.execute(
                 "INSERT INTO events (ts, level, provider, message) VALUES (?, ?, ?, ?)",
                 (ts or int(time.time()), level, provider, message),
             )
 
     def latest_snapshot(self) -> dict[str, Any] | None:
-        with self.lock, self._connect() as conn:
+        with self.lock, closing(self._connect()) as conn:
             row = conn.execute(
                 "SELECT * FROM snapshots ORDER BY ts DESC LIMIT 1"
             ).fetchone()
@@ -628,7 +629,7 @@ class SnapshotStore:
 
     def history(self, minutes: int = 180) -> list[dict[str, Any]]:
         since = int(time.time()) - max(1, min(minutes, 24 * 60)) * 60
-        with self.lock, self._connect() as conn:
+        with self.lock, closing(self._connect()) as conn:
             rows = conn.execute(
                 """
                 SELECT ts, activity_score, activity_status, active_process_count, total_cpu, total_memory
@@ -643,7 +644,7 @@ class SnapshotStore:
 
     def events(self, limit: int = 100) -> list[dict[str, Any]]:
         limit = max(1, min(limit, 300))
-        with self.lock, self._connect() as conn:
+        with self.lock, closing(self._connect()) as conn:
             rows = conn.execute(
                 "SELECT ts, level, provider, message FROM events ORDER BY ts DESC LIMIT ?",
                 (limit,),
