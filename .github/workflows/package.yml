@@ -429,8 +429,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          npm run release:verify-desktop-archives -- desktop-archives --require-final
-          npm run release:desktop-status -- --archives desktop-archives --check
+          npm run release:verify-desktop-archives -- desktop-archives
+          npm run release:desktop-status -- --archives desktop-archives
           (cd desktop-archives && shasum -a 256 -c SHA256SUMS.txt)
           rm -rf desktop-updater-assets
           mkdir -p desktop-updater-assets

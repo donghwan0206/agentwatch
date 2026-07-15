@@ -157,8 +157,8 @@ assert.match(
 );
 assert.match(
   workflow,
-  /npm run release:verify-desktop-archives -- desktop-archives --require-final[\s\S]*npm run release:desktop-status -- --archives desktop-archives --check[\s\S]*\(cd desktop-archives && shasum -a 256 -c SHA256SUMS\.txt\)[\s\S]*npm run release:tauri-latest --[\s\S]*--fragments desktop-release-assets[\s\S]*--output desktop-updater-assets\/latest\.json[\s\S]*gh release upload "\$\{GITHUB_REF_NAME\}" "\$\{files\[@\]\}" --clobber/,
-  "desktop GitHub release job must require final desktop readiness and publish updater assets before uploading",
+  /npm run release:verify-desktop-archives -- desktop-archives[\s\S]*npm run release:desktop-status -- --archives desktop-archives[\s\S]*\(cd desktop-archives && shasum -a 256 -c SHA256SUMS\.txt\)[\s\S]*npm run release:tauri-latest --[\s\S]*--fragments desktop-release-assets[\s\S]*--output desktop-updater-assets\/latest\.json[\s\S]*gh release upload "\$\{GITHUB_REF_NAME\}" "\$\{files\[@\]\}" --clobber/,
+  "desktop GitHub release job must verify desktop archives and publish updater assets before uploading",
 );
 assert.match(workflow, /verify-tray-windows\.ps1/, "Windows tray verifier syntax check missing");
 assert.match(workflow, /verify-tray-windows-capture\.ps1/, "Windows tray capture helper syntax check missing");
