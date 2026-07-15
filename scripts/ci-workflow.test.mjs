@@ -76,7 +76,7 @@ assert.match(
   /Verify tray config[\s\S]*if: runner\.os != 'Linux'[\s\S]*node scripts\/verify-tray-config\.mjs --output-dir release-assets/,
   "packaged app tray config verification missing",
 );
-assert.match(workflow, /xvfb-run -a npm run smoke/, "Linux Xvfb packaged smoke missing");
+assert.match(workflow, /dbus-run-session -- xvfb-run -a npm run smoke/, "Linux DBus/Xvfb packaged smoke missing");
 assert.match(workflow, /dbus-user-session/, "Linux DBus user session dependency missing");
 assert.match(
   workflow,
@@ -86,8 +86,8 @@ assert.match(
 assert.match(workflow, /npm run bench:report -- release-assets/, "performance report generation missing");
 assert.match(
   workflow,
-  /xvfb-run -a npm run bench:report -- release-assets/,
-  "Linux Xvfb performance report generation missing",
+  /dbus-run-session -- xvfb-run -a npm run bench:report -- release-assets/,
+  "Linux DBus/Xvfb performance report generation missing",
 );
 assert.match(
   workflow,
