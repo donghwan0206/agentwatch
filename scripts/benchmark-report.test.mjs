@@ -21,11 +21,41 @@ try {
     p95ResponseMs: { value: -4.4, percent: -80 },
     rssMb: null,
   });
+  assertOptionalBenchmarkFallback();
 
   console.log("benchmark-report tests ok");
 } catch (error) {
   console.error(error);
   process.exitCode = 1;
+}
+
+function assertOptionalBenchmarkFallback() {
+  const dir = mkdtempSync(join(tmpdir(), "agentwatch-benchmark-report-optional-"));
+  try {
+    const assetsDir = join(dir, "assets");
+    const result = spawnSync(
+      process.execPath,
+      ["scripts/benchmark-report.mjs", "--service-only", assetsDir],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          AGENTWATCH_BENCH_OPTIONAL: "1",
+          PATH: dir,
+          RUNNER_OS: "Linux",
+        },
+      },
+    );
+    assert.equal(result.status, 0, result.stderr);
+
+    const report = JSON.parse(readFileSync(join(assetsDir, "performance-comparison-linux.json"), "utf8"));
+    assert.equal(report.benchmark.status, "skipped");
+    assert.equal(report.performanceVerdict.status, "skipped");
+    assert.match(report.benchmark.error, /node|not found|ENOENT/i);
+  } finally {
+    rmSync(dir, { force: true, recursive: true });
+  }
 }
 
 function assertReportVerdict(expectedStatus, headlessVsPython) {

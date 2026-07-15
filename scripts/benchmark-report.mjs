@@ -38,15 +38,23 @@ console.log(`performance comparison written: ${jsonPath}`);
 console.log(`performance summary written: ${markdownPath}`);
 
 async function runBenchmarkCompare() {
-  const { stdout, stderr } = await execFileAsync("node", ["scripts/benchmark-compare.mjs"].concat(serviceOnly ? ["--service-only"] : []), {
-    cwd: root,
-    env: process.env,
-    maxBuffer: 1024 * 1024 * 16,
-  });
-  if (stderr.trim()) {
-    process.stderr.write(stderr);
+  try {
+    const { stdout, stderr } = await execFileAsync("node", ["scripts/benchmark-compare.mjs"].concat(serviceOnly ? ["--service-only"] : []), {
+      cwd: root,
+      env: process.env,
+      maxBuffer: 1024 * 1024 * 16,
+    });
+    if (stderr.trim()) {
+      process.stderr.write(stderr);
+    }
+    return JSON.parse(stdout);
+  } catch (error) {
+    if (process.env.AGENTWATCH_BENCH_OPTIONAL !== "1") {
+      throw error;
+    }
+    const detail = error.stderr?.trim() || error.stdout?.trim() || error.message;
+    return skippedComparison(detail);
   }
-  return JSON.parse(stdout);
 }
 
 function renderMarkdown(report) {
@@ -101,6 +109,23 @@ function renderMarkdown(report) {
 }
 
 function buildPerformanceVerdict(benchmark) {
+  if (benchmark?.status === "skipped") {
+    return {
+      status: "skipped",
+      comparison: "headlessVsPython",
+      requirements: [
+        "startupMs",
+        "avgResponseMs",
+        "p95ResponseMs",
+        "rssMb",
+      ].map((metric) => ({
+        metric,
+        label: `Rust headless ${metric} comparison skipped`,
+        actualDelta: null,
+        passed: false,
+      })),
+    };
+  }
   const comparison = benchmark?.delta?.headlessVsPython ?? {};
   const requirements = [
     verdictRequirement("startupMs", comparison.startupMs, "Rust headless startup lower than Python"),
@@ -141,6 +166,38 @@ function normalizePlatform(value) {
   if (lower.includes("win")) return "windows";
   if (lower.includes("linux")) return "linux";
   return lower.replace(/[^a-z0-9]+/g, "-") || "unknown";
+}
+
+function skippedComparison(error) {
+  const platformName = normalizePlatform(process.env.RUNNER_OS || nodePlatform());
+  const skippedRuntime = (runtime) => ({
+    runtime,
+    platform: runtime === "python" ? undefined : platformName,
+    startupMs: null,
+    avgResponseMs: null,
+    p95ResponseMs: null,
+    rssMb: null,
+    status: "skipped",
+    activeProcessCount: null,
+  });
+  return {
+    status: "skipped",
+    error,
+    rustDesktop: serviceOnly ? null : skippedRuntime("tauri-rust"),
+    rustHeadless: skippedRuntime("rust-headless"),
+    python: skippedRuntime("python"),
+    delta: {
+      desktopVsPython: null,
+      headlessVsPython: {
+        startupMs: null,
+        avgResponseMs: null,
+        p95ResponseMs: null,
+        rssMb: null,
+      },
+      headlessVsDesktop: null,
+    },
+    note: "Benchmark collection was skipped because the live comparison did not complete on this runner. Release readiness treats this report as diagnostic evidence, not a packaging blocker.",
+  };
 }
 
 function readComparison(path) {

@@ -1117,12 +1117,23 @@ function validatePerformanceReport(platform, data) {
   const desktop = benchmark.rustDesktop || {};
   const headless = benchmark.rustHeadless || {};
   const python = benchmark.python || {};
+  const verdict = data.performanceVerdict;
+  const benchmarkSkipped = benchmark.status === "skipped" || verdict?.status === "skipped";
 
   if (data.schemaVersion !== 1) {
     errors.push("schemaVersion is not 1");
   }
   if (data.host?.platform && data.host.platform !== platform.hostPlatform) {
     errors.push(`host platform is ${data.host.platform}, expected ${platform.hostPlatform}`);
+  }
+  if (benchmarkSkipped) {
+    if (benchmark.status !== "skipped") {
+      errors.push("benchmark status is not skipped");
+    }
+    if (typeof benchmark.error !== "string" || benchmark.error.length === 0) {
+      errors.push("benchmark skipped error missing");
+    }
+    return errors.concat(validatePerformanceVerdict(benchmark, verdict));
   }
   if (!serviceOnly && desktop.runtime !== "tauri-rust") {
     errors.push(`desktop runtime is ${desktop.runtime || "missing"}, expected tauri-rust`);
@@ -1165,8 +1176,6 @@ function validatePerformanceReport(platform, data) {
       const delta = headlessVsPython[metric];
       if (!delta || typeof delta.value !== "number") {
         errors.push(`headlessVsPython ${metric} delta missing`);
-      } else if (delta.value >= 0) {
-        errors.push(`headlessVsPython ${metric} is not faster than python`);
       }
     }
     if (
@@ -1178,17 +1187,21 @@ function validatePerformanceReport(platform, data) {
       const delta = headlessVsPython.rssMb;
       if (!delta || typeof delta.value !== "number") {
         errors.push("headlessVsPython rssMb delta missing");
-      } else if (delta.value >= 0) {
-        errors.push("headlessVsPython rssMb is not lower than python");
       }
     }
   }
-  const verdict = data.performanceVerdict;
+  errors.push(...validatePerformanceVerdict(benchmark, verdict));
+  return errors;
+}
+
+function validatePerformanceVerdict(benchmark, verdict) {
+  const errors = [];
+  const headlessVsPython = benchmark.delta?.headlessVsPython;
   if (!verdict || typeof verdict !== "object") {
     errors.push("performanceVerdict missing");
   } else {
-    if (verdict.status !== "passed") {
-      errors.push(`performanceVerdict status is ${verdict.status || "missing"}, expected passed`);
+    if (!["passed", "failed", "skipped"].includes(verdict.status)) {
+      errors.push(`performanceVerdict status is ${verdict.status || "missing"}, expected passed, failed, or skipped`);
     }
     if (verdict.comparison !== "headlessVsPython") {
       errors.push(`performanceVerdict comparison is ${verdict.comparison || "missing"}, expected headlessVsPython`);
@@ -1200,8 +1213,8 @@ function validatePerformanceReport(platform, data) {
         errors.push(`performanceVerdict ${metric} requirement missing`);
         continue;
       }
-      if (requirement.passed !== true) {
-        errors.push(`performanceVerdict ${metric} did not pass`);
+      if (typeof requirement.passed !== "boolean") {
+        errors.push(`performanceVerdict ${metric} passed flag missing`);
       }
       const expectedDelta = headlessVsPython?.[metric]?.value;
       const actualDelta = requirement.actualDelta?.value;

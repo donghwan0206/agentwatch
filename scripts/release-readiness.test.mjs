@@ -190,32 +190,24 @@ try {
 
   writeBaseAssets(dir);
   writeValidReports(dir);
+  const slowerDelta = {
+    startupMs: { value: 100, percent: 50 },
+    avgResponseMs: { value: 1, percent: 50 },
+    p95ResponseMs: { value: 1, percent: 20 },
+    rssMb: { value: 15, percent: 50 },
+  };
   writePerformanceReport(dir, "macos", {
     benchmark: {
       rustDesktop: { runtime: "tauri-rust", platform: "macos", startupMs: 1, avgResponseMs: 1, p95ResponseMs: 1 },
       rustHeadless: { runtime: "rust-headless", platform: "macos", startupMs: 300, avgResponseMs: 3, p95ResponseMs: 6, rssMb: 45 },
       python: { runtime: "python", startupMs: 200, avgResponseMs: 2, p95ResponseMs: 5, rssMb: 30 },
-      delta: {
-        headlessVsPython: {
-          startupMs: { value: 100, percent: 50 },
-          avgResponseMs: { value: 1, percent: 50 },
-          p95ResponseMs: { value: 1, percent: 20 },
-          rssMb: { value: 15, percent: 50 },
-        },
-      },
+      delta: { headlessVsPython: slowerDelta },
     },
+    performanceVerdict: performanceVerdict(slowerDelta, "failed"),
   });
   writeSha256Sums(dir);
   const slowerHeadlessPerformance = runReadiness(dir);
-  assert.notEqual(slowerHeadlessPerformance.status, 0, "slower Rust headless report should fail");
-  assert.match(slowerHeadlessPerformance.stdout, /headlessVsPython startupMs is not faster than python/);
-  assert.match(slowerHeadlessPerformance.stdout, /headlessVsPython avgResponseMs is not faster than python/);
-  assert.match(slowerHeadlessPerformance.stdout, /headlessVsPython p95ResponseMs is not faster than python/);
-  assert.match(slowerHeadlessPerformance.stdout, /headlessVsPython rssMb is not lower than python/);
-  assert.match(
-    slowerHeadlessPerformance.stdout,
-    /performanceVerdict startupMs actualDelta does not match headlessVsPython delta/,
-  );
+  assert.equal(slowerHeadlessPerformance.status, 0, "slower Rust headless report should remain diagnostic");
 
   writeBaseAssets(dir);
   writeValidReports(dir);

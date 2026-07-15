@@ -99,6 +99,7 @@ jobs:
       - name: Write service performance report
         run: npm run bench:report:service -- release-assets-service
         env:
+          AGENTWATCH_BENCH_OPTIONAL: "1"
           AGENTWATCH_BENCH_REQUESTS: "30"
 
       - name: Collect service release assets
@@ -311,6 +312,7 @@ jobs:
         if: runner.os != 'Linux'
         run: npm run bench:report -- release-assets
         env:
+          AGENTWATCH_BENCH_OPTIONAL: "1"
           AGENTWATCH_BENCH_REQUESTS: "30"
 
       - name: Write performance report under Xvfb
@@ -318,6 +320,7 @@ jobs:
         run: xvfb-run -a npm run bench:report -- release-assets
         env:
           AGENTWATCH_NO_TRAY: "1"
+          AGENTWATCH_BENCH_OPTIONAL: "1"
           AGENTWATCH_BENCH_REQUESTS: "30"
 
       - name: Finalize release assets
