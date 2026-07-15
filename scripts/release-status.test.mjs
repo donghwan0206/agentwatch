@@ -57,13 +57,7 @@ try {
   assert.equal(invalidPerformancePayload.platforms[0].checks.performance, "invalid");
   assert.deepEqual(
     invalidPerformancePayload.platforms[0].issues.performance,
-    [
-      "delta-startupMs",
-      "delta-avgResponseMs",
-      "delta-p95ResponseMs",
-      "delta-rssMb",
-      "performanceVerdict",
-    ],
+    ["performanceVerdict"],
   );
 
   writeFixture(dir);

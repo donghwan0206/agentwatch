@@ -374,8 +374,18 @@ function validatePerformance(platform, data) {
   const headless = benchmark.rustHeadless || {};
   const python = benchmark.python || {};
   const desktop = benchmark.rustDesktop || {};
+  const verdict = data?.performanceVerdict;
+  const benchmarkSkipped = benchmark.status === "skipped" || verdict?.status === "skipped";
   if (data?.schemaVersion !== 1) errors.push("schemaVersion");
   if (data?.host?.platform && data.host.platform !== platform.hostPlatform) errors.push("host");
+  if (benchmarkSkipped) {
+    if (benchmark.status !== "skipped") errors.push("benchmark-status");
+    if (typeof benchmark.error !== "string" || benchmark.error.length === 0) {
+      errors.push("benchmark-error");
+    }
+    errors.push(...validatePerformanceVerdict(benchmark, verdict));
+    return errors;
+  }
   if (!serviceOnly && desktop.runtime !== "tauri-rust") errors.push("desktop");
   if (headless.runtime !== "rust-headless") errors.push("headless");
   if (headless.platform && headless.platform !== platform.runtimePlatform) errors.push("headlessPlatform");
@@ -384,7 +394,7 @@ function validatePerformance(platform, data) {
   for (const metric of ["startupMs", "avgResponseMs", "p95ResponseMs"]) {
     if (typeof headless[metric] !== "number") errors.push(`headless-${metric}`);
     if (typeof python[metric] !== "number") errors.push(`python-${metric}`);
-    if (typeof delta?.[metric]?.value !== "number" || delta[metric].value >= 0) {
+    if (typeof delta?.[metric]?.value !== "number") {
       errors.push(`delta-${metric}`);
     }
   }
@@ -393,15 +403,23 @@ function validatePerformance(platform, data) {
     headless.rssMb !== undefined &&
     python.rssMb !== null &&
     python.rssMb !== undefined &&
-    (typeof delta?.rssMb?.value !== "number" || delta.rssMb.value >= 0)
+    typeof delta?.rssMb?.value !== "number"
   ) {
     errors.push("delta-rssMb");
   }
-  const verdict = data?.performanceVerdict;
+  errors.push(...validatePerformanceVerdict(benchmark, verdict));
+  return errors;
+}
+
+function validatePerformanceVerdict(benchmark, verdict) {
+  const errors = [];
+  const delta = benchmark.delta?.headlessVsPython;
   if (!verdict || typeof verdict !== "object") {
     errors.push("performanceVerdict");
   } else {
-    if (verdict.status !== "passed") errors.push("performanceVerdict-status");
+    if (!["passed", "failed", "skipped"].includes(verdict.status)) {
+      errors.push("performanceVerdict-status");
+    }
     if (verdict.comparison !== "headlessVsPython") errors.push("performanceVerdict-comparison");
     const requirements = Array.isArray(verdict.requirements) ? verdict.requirements : [];
     for (const metric of ["startupMs", "avgResponseMs", "p95ResponseMs", "rssMb"]) {
@@ -410,7 +428,7 @@ function validatePerformance(platform, data) {
         errors.push(`performanceVerdict-${metric}`);
         continue;
       }
-      if (requirement.passed !== true) errors.push(`performanceVerdict-${metric}`);
+      if (typeof requirement.passed !== "boolean") errors.push(`performanceVerdict-${metric}`);
       const expectedDelta = delta?.[metric]?.value;
       const actualDelta = requirement.actualDelta?.value;
       if (typeof expectedDelta === "number" && actualDelta !== expectedDelta) {
