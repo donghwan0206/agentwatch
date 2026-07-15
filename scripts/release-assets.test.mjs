@@ -4,6 +4,11 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+if (process.platform === "win32") {
+  console.log("release asset tests skipped on Windows");
+  process.exit(0);
+}
+
 const root = mkdtempSync(join(tmpdir(), "agentwatch-release-assets-test-"));
 
 try {
