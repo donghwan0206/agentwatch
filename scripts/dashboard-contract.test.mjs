@@ -16,6 +16,10 @@ for (const marker of [
   "remoteLoopback",
   "remoteSameHostIp",
   "remoteEvidenceName",
+  "topbar-tools",
+  "header-actions",
+  "top-menu",
+  "portSummary",
   "observedTokens",
   "maxDayTokens",
   "tokenProviderFilters",
@@ -30,6 +34,17 @@ for (const marker of [
   "토큰 로그 위치",
 ]) {
   assert.match(html, new RegExp(escapeRegExp(marker)), `dashboard HTML missing ${marker}`);
+}
+
+for (const marker of [
+  "status-grid",
+  "현재 활동",
+  "activityTitle",
+  "activityCopy",
+  "processCount",
+  "cpuTotal",
+]) {
+  assert.doesNotMatch(html, new RegExp(escapeRegExp(marker)), `dashboard HTML should not include ${marker}`);
 }
 
 assert.ok(
@@ -53,6 +68,7 @@ for (const marker of [
   "portPlaceholder",
   "portSetupCopy",
   "portSetupStatus",
+  "portSummary",
   "renderRemoteVerify",
   "copyLanUrl",
   "copyText",
@@ -100,6 +116,18 @@ for (const marker of [
   assert.match(js, new RegExp(escapeRegExp(marker)), `dashboard JS missing ${marker}`);
 }
 
+for (const marker of [
+  "renderSummary",
+  "statusLabels",
+  "activityTitle",
+  "activityCopy",
+]) {
+  assert.doesNotMatch(js, new RegExp(escapeRegExp(marker)), `dashboard JS should not include ${marker}`);
+}
+
+assert.doesNotMatch(js, /\$\(["']processCount["']\)/, "dashboard JS should not render the removed process count card");
+assert.doesNotMatch(js, /\$\(["']cpuTotal["']\)/, "dashboard JS should not render the removed CPU total card");
+
 assert.doesNotMatch(
   js,
   /버튼이 활성화됩니다/,
@@ -107,16 +135,19 @@ assert.doesNotMatch(
 );
 
 for (const marker of [
-  ".remote-verify-panel",
-  ".remote-verify-body",
+  ".topbar-tools",
+  ".header-actions",
+  ".top-menu",
+  ".top-menu-body",
+  ".top-menu.attention",
+  ".compact-head",
   ".remote-verify-badge.passed",
   ".remote-verify-badge.local",
   ".remote-verify-facts",
   ".lan-row",
   ".copy-url-btn",
   ".lan-hint",
-  ".port-setup-panel",
-  ".port-setup-panel.hidden",
+  ".port-menu",
   ".port-setup-form",
   ".port-setup-status",
   ".usage-location-panel",

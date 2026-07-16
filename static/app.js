@@ -19,14 +19,6 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 
-const statusLabels = {
-  quiet: ["조용함", "감지된 에이전트 프로세스가 없습니다."],
-  idle: ["대기 중", "에이전트 프로세스는 켜져 있지만 CPU 활동은 낮습니다."],
-  active: ["작업 중", "하나 이상의 에이전트가 움직이고 있습니다."],
-  busy: ["바쁨", "여러 프로세스 또는 높은 CPU 활동이 감지됩니다."],
-  offline: ["꺼짐", "현재 실행 중인 프로세스가 없습니다."],
-};
-
 async function fetchJson(url) {
   const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
@@ -70,7 +62,6 @@ function render() {
   renderPortSetup();
   renderUpdatePanel();
   renderRemoteVerify();
-  renderSummary();
   renderProviders();
   renderUsage();
   renderUsageLocations();
@@ -170,30 +161,17 @@ function renderPortSetup() {
   const configuredPort = Number(config.configuredPort || 0);
   const runtimePort = Number(runtime.port || config.effectivePort || 0);
   const portMismatch = configuredPort > 0 && runtimePort > 0 && configuredPort !== runtimePort && !config.envPort;
-  const shouldShow = config.firstRun === true || portMismatch || state.portSaveStatus !== "idle";
-  panel.classList.toggle("hidden", !shouldShow);
+  const needsAttention = config.firstRun === true || portMismatch || state.portSaveStatus === "error";
+  panel.classList.toggle("attention", needsAttention);
   const placeholder = String(portPlaceholder());
   const input = $("portInput");
   input.placeholder = placeholder;
+  const summary = $("portSummary");
+  if (summary) summary.textContent = runtimePort > 0 ? String(runtimePort) : "auto";
   $("portSetupCopy").textContent = portSetupCopy(config, runtime);
-  $("portSaveBtn").textContent = state.portSaveStatus === "saving" ? "저장 중" : "현재 포트 저장";
+  $("portSaveBtn").textContent = state.portSaveStatus === "saving" ? "저장 중" : "저장";
   $("portSaveBtn").disabled = state.portSaveStatus === "saving";
   $("portSetupStatus").textContent = portSetupStatus(config, runtime);
-}
-
-function renderSummary() {
-  const activity = state.snapshot?.activity;
-  if (!activity) return;
-
-  const [title, copy] = statusLabels[activity.status] || statusLabels.idle;
-  $("activityTitle").textContent = title;
-  $("activityCopy").textContent = copy;
-  $("score").textContent = activity.score;
-  $("processCount").textContent = activity.activeProcessCount;
-  $("cpuTotal").textContent = `${activity.totalCpu.toFixed(1)}%`;
-
-  const orb = $("activityOrb");
-  orb.className = `activity-orb ${activity.status}`;
 }
 
 function renderProviders() {
@@ -1346,8 +1324,11 @@ $("tokenGrass").addEventListener("scroll", updateTokenGrassOverflow);
 window.addEventListener("resize", () => syncTokenGrassViewport(state.tokenGrassStickToToday));
 
 function showError(error) {
-  $("activityTitle").textContent = "연결 오류";
-  $("activityCopy").textContent = error.message;
+  console.error(error);
+  const status = $("updateStatusText");
+  if (status) {
+    status.textContent = `연결 오류: ${error.message}`;
+  }
 }
 
 refresh().catch(showError);

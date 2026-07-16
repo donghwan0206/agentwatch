@@ -18,107 +18,95 @@
             <p id="hostLine">에이전트 머신 연결 대기 중</p>
           </div>
         </div>
-        <div class="network">
-          <span class="label">LAN URL</span>
-          <div class="lan-row">
-            <strong id="lanUrl">-</strong>
-            <button id="copyLanUrlBtn" class="copy-url-btn" type="button">복사</button>
+
+        <div class="topbar-tools">
+          <div class="network">
+            <span class="label">LAN URL</span>
+            <div class="lan-row">
+              <strong id="lanUrl">-</strong>
+              <button id="copyLanUrlBtn" class="copy-url-btn" type="button">복사</button>
+            </div>
+            <span id="runtimeMode" class="runtime-mode">-</span>
+            <span id="lanHint" class="lan-hint">같은 네트워크의 다른 기기에서 LAN URL을 여세요.</span>
           </div>
-          <span id="localUrl" class="local-url">-</span>
-          <span id="runtimeMode" class="runtime-mode">-</span>
-          <span id="lanHint" class="lan-hint">같은 네트워크의 다른 기기에서 LAN URL을 여세요.</span>
+
+          <div class="header-actions">
+            <details id="portSetupPanel" class="top-menu port-menu">
+              <summary>
+                <span>포트</span>
+                <strong id="portSummary">-</strong>
+              </summary>
+              <div class="top-menu-body">
+                <p class="eyebrow">Setup</p>
+                <h2>대시보드 포트 설정</h2>
+                <p id="portSetupCopy">처음 실행한 포트를 저장하면 다음 실행부터 같은 포트를 우선 사용합니다.</p>
+                <div class="port-setup-form">
+                  <label for="portInput">포트</label>
+                  <input id="portInput" type="number" min="1" max="65535" inputmode="numeric" />
+                  <button id="portSaveBtn" type="button">저장</button>
+                </div>
+                <p id="portSetupStatus" class="port-setup-status"></p>
+                <p class="local-url">Local <span id="localUrl">-</span></p>
+              </div>
+            </details>
+
+            <details class="top-menu update-menu">
+              <summary>
+                <span>업데이트</span>
+                <strong id="updateVersionText">-</strong>
+              </summary>
+              <div class="top-menu-body">
+                <p class="eyebrow">Update</p>
+                <h2>온에어 업데이트</h2>
+                <p id="updateStatusText">업데이트 상태 확인 중</p>
+                <div class="update-progress" aria-hidden="true">
+                  <span id="updateProgressBar"></span>
+                </div>
+                <div class="update-actions">
+                  <button id="updateCheckBtn" type="button">업데이트 확인</button>
+                  <button id="updateInstallBtn" type="button" disabled>설치 및 재시작</button>
+                </div>
+              </div>
+            </details>
+
+            <details class="top-menu remote-menu">
+              <summary>
+                <span>원격</span>
+                <strong id="remoteVerifyBadge" class="remote-verify-badge pending">checking</strong>
+              </summary>
+              <div class="top-menu-body">
+                <div class="panel-head compact-head">
+                  <div>
+                    <p class="eyebrow">Remote Verify</p>
+                    <h2>브라우저 원격 검증</h2>
+                  </div>
+                  <button id="downloadRemoteReportBtn" type="button" disabled>검증 JSON</button>
+                </div>
+                <strong id="remoteVerifyTitle">원격 접속 확인 중</strong>
+                <p id="remoteVerifyCopy">이 브라우저가 에이전트 머신과 다른 LAN 기기인지 확인하고 있습니다.</p>
+                <dl class="remote-verify-facts">
+                  <div>
+                    <dt>Client IP</dt>
+                    <dd id="remoteClientIp">-</dd>
+                  </div>
+                  <div>
+                    <dt>Loopback</dt>
+                    <dd id="remoteLoopback">-</dd>
+                  </div>
+                  <div>
+                    <dt>Same host IP</dt>
+                    <dd id="remoteSameHostIp">-</dd>
+                  </div>
+                  <div>
+                    <dt>Evidence</dt>
+                    <dd id="remoteEvidenceName">-</dd>
+                  </div>
+                </dl>
+              </div>
+            </details>
+          </div>
         </div>
       </header>
-
-      <section id="portSetupPanel" class="port-setup-panel panel hidden">
-        <div>
-          <p class="eyebrow">Setup</p>
-          <h2>대시보드 포트 설정</h2>
-          <p id="portSetupCopy">처음 실행한 포트를 저장하면 다음 실행부터 같은 포트를 우선 사용합니다.</p>
-        </div>
-        <div class="port-setup-form">
-          <label for="portInput">포트</label>
-          <input id="portInput" type="number" min="1" max="65535" inputmode="numeric" />
-          <button id="portSaveBtn" type="button">현재 포트 저장</button>
-        </div>
-        <p id="portSetupStatus" class="port-setup-status"></p>
-      </section>
-
-      <section class="update-panel panel">
-        <div>
-          <p class="eyebrow">Update</p>
-          <h2>온에어 업데이트</h2>
-          <p id="updateStatusText">업데이트 상태 확인 중</p>
-        </div>
-        <div class="update-progress" aria-hidden="true">
-          <span id="updateProgressBar"></span>
-        </div>
-        <div class="update-actions">
-          <span id="updateVersionText">-</span>
-          <button id="updateCheckBtn" type="button">업데이트 확인</button>
-          <button id="updateInstallBtn" type="button" disabled>설치 및 재시작</button>
-        </div>
-      </section>
-
-      <section class="status-grid">
-        <article class="status-panel">
-          <div class="activity-orb" id="activityOrb" aria-hidden="true">
-            <span></span>
-          </div>
-          <div>
-            <p class="eyebrow">현재 활동</p>
-            <h2 id="activityTitle">읽는 중</h2>
-            <p id="activityCopy">프로세스 메타데이터 스냅샷을 가져오고 있습니다.</p>
-          </div>
-        </article>
-        <article class="metric">
-          <span>활동 점수</span>
-          <strong id="score">0</strong>
-        </article>
-        <article class="metric">
-          <span>감지 프로세스</span>
-          <strong id="processCount">0</strong>
-        </article>
-        <article class="metric">
-          <span>CPU 합계</span>
-          <strong id="cpuTotal">0%</strong>
-        </article>
-      </section>
-
-      <section class="remote-verify-panel panel">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">Remote Verify</p>
-            <h2>브라우저 원격 검증</h2>
-          </div>
-          <button id="downloadRemoteReportBtn" type="button" disabled>검증 JSON</button>
-        </div>
-        <div class="remote-verify-body">
-          <div id="remoteVerifyBadge" class="remote-verify-badge pending">checking</div>
-          <div>
-            <strong id="remoteVerifyTitle">원격 접속 확인 중</strong>
-            <p id="remoteVerifyCopy">이 브라우저가 에이전트 머신과 다른 LAN 기기인지 확인하고 있습니다.</p>
-          </div>
-        </div>
-        <dl class="remote-verify-facts">
-          <div>
-            <dt>Client IP</dt>
-            <dd id="remoteClientIp">-</dd>
-          </div>
-          <div>
-            <dt>Loopback</dt>
-            <dd id="remoteLoopback">-</dd>
-          </div>
-          <div>
-            <dt>Same host IP</dt>
-            <dd id="remoteSameHostIp">-</dd>
-          </div>
-          <div>
-            <dt>Evidence</dt>
-            <dd id="remoteEvidenceName">-</dd>
-          </div>
-        </dl>
-      </section>
 
       <section class="usage-grid">
         <section class="panel quota-panel">
