@@ -1,6 +1,6 @@
 {
   "name": "agentwatch",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "private": true,
   "description": "Desktop tray app with an embedded LAN monitor for local LLM agents.",
   "scripts": {

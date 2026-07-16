@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 const html = readFileSync("static/index.html", "utf8");
 const js = readFileSync("static/app.js", "utf8");
 const css = readFileSync("static/styles.css", "utf8");
+const server = readFileSync("src-tauri/src/server.rs", "utf8");
+const usageCollector = readFileSync("src-tauri/src/usage.rs", "utf8");
 
 for (const marker of [
   "브라우저 원격 검증",
@@ -112,9 +114,63 @@ for (const marker of [
   "최종 검증 JSON으로 바뀝니다",
   "remote 검증으로 바뀝니다",
   "선택됨",
+  "schedulePoll",
+  "refreshLive",
+  "refreshActivity",
+  "refreshUsage",
+  "visibilitychange",
+  "document.visibilityState",
+  "LIVE_REFRESH_MS",
+  "ACTIVITY_REFRESH_MS",
+  "USAGE_REFRESH_MS",
+  'fetch("/api/usage/refresh"',
+  "mergeHistoryPoints",
+  "mergeProviderHistoryPoints",
 ]) {
   assert.match(js, new RegExp(escapeRegExp(marker)), `dashboard JS missing ${marker}`);
 }
+
+assert.doesNotMatch(
+  js,
+  /setInterval\(\(\) => refresh\(\)/,
+  "dashboard must not launch overlapping full refreshes",
+);
+
+for (const marker of [
+  "usage_cache: RwLock<Option<CachedUsage>>",
+  "compare_exchange(false, true",
+  "spawn_blocking(|| usage::collect_all(366))",
+  'route("/api/usage/refresh", post(refresh_usage_route))',
+  "state.usage_payload(days)",
+]) {
+  assert.match(server, new RegExp(escapeRegExp(marker)), `server missing usage cache contract: ${marker}`);
+}
+assert.doesNotMatch(
+  server,
+  /async fn usage_route[\s\S]{0,600}usage::collect_all/,
+  "usage API route must not scan logs synchronously",
+);
+
+for (const marker of [
+  "cursor INTEGER NOT NULL DEFAULT 0",
+  "collect_codex_sqlite_events_from",
+  "collect_codex_jsonl_events_from",
+  "collect_claude_jsonl_events_from",
+  "SeekFrom::Start(cursor)",
+  "ORDER BY rowid DESC",
+  "LIMIT 5000",
+]) {
+  assert.match(
+    usageCollector,
+    new RegExp(escapeRegExp(marker)),
+    `usage collector missing incremental contract: ${marker}`,
+  );
+}
+assert.doesNotMatch(
+  js,
+  /Promise\.all\(\[[\s\S]*usage\?days=366[\s\S]*provider-history\?minutes=180/,
+  "heavy usage and activity requests must not share the live refresh cycle",
+);
 
 for (const marker of [
   "renderSummary",

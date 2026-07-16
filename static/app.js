@@ -6,6 +6,7 @@ const state = {
   remoteCheck: null,
   events: [],
   usage: [],
+  usageCollectedAt: 0,
   usageLocations: [],
   config: null,
   updateStatus: null,
@@ -18,6 +19,12 @@ const state = {
 };
 
 const $ = (id) => document.getElementById(id);
+const LIVE_REFRESH_MS = 5_000;
+const ACTIVITY_REFRESH_MS = 30_000;
+const USAGE_REFRESH_MS = 60_000;
+const META_REFRESH_MS = 60_000;
+const pollTimers = new Map();
+const pollInFlight = new Set();
 
 async function fetchJson(url) {
   const response = await fetch(url, { cache: "no-store" });
@@ -26,35 +33,147 @@ async function fetchJson(url) {
 }
 
 async function refresh() {
-  const [runtime, config, updateStatus, snapshot, history, providerHistory, remoteCheck, events, usage, usageLocations] = await Promise.all([
+  await Promise.all([
+    refreshMetadata(),
+    refreshLive(),
+    refreshActivity(),
+    refreshUsage(),
+  ]);
+  syncDebugState();
+}
+
+async function refreshMetadata() {
+  const [runtime, config, updateStatus, remoteCheck] = await Promise.all([
     fetchJson("/api/runtime"),
     fetchJson("/api/config"),
     fetchJson("/api/update/status"),
-    fetchJson("/api/snapshot"),
-    fetchJson("/api/history?minutes=180"),
-    fetchJson("/api/provider-history?minutes=180"),
     fetchJson("/api/remote-check"),
-    fetchJson("/api/events?limit=80"),
-    fetchJson("/api/usage?days=366"),
-    fetchJson("/api/usage-locations"),
   ]);
   state.runtime = runtime;
   state.config = config;
   state.updateStatus = updateStatus;
-  state.snapshot = snapshot;
-  state.history = history.history || [];
-  state.providerHistory = providerHistory.providerHistory || [];
   state.remoteCheck = remoteCheck;
+  renderHeader();
+  renderPortSetup();
+  renderUpdatePanel();
+  renderRemoteVerify();
+}
+
+async function refreshLive() {
+  const snapshot = await fetchJson("/api/snapshot");
+  state.snapshot = snapshot;
+  renderHeader();
+  renderProviders();
+  renderRemoteVerify();
+}
+
+async function refreshActivity() {
+  const historySince = latestTimestamp(state.history);
+  const providerSince = latestTimestamp(state.providerHistory);
+  const historyUrl = historySince
+    ? `/api/history?minutes=180&bucket=30&since=${historySince}`
+    : "/api/history?minutes=180&bucket=30";
+  const providerUrl = providerSince
+    ? `/api/provider-history?minutes=180&bucket=30&since=${providerSince}`
+    : "/api/provider-history?minutes=180&bucket=30";
+  const [history, providerHistory, events] = await Promise.all([
+    fetchJson(historyUrl),
+    fetchJson(providerUrl),
+    fetchJson("/api/events?limit=80"),
+  ]);
+  state.history = mergeHistoryPoints(state.history, history.history || []);
+  state.providerHistory = mergeProviderHistoryPoints(
+    state.providerHistory,
+    providerHistory.providerHistory || [],
+  );
   state.events = events.events || [];
+  renderTrend();
+  renderHeatmap();
+  renderProviderHistory();
+  renderEvents();
+}
+
+async function refreshUsage() {
+  const usage = await fetchJson("/api/usage?days=366");
   state.usage = normalizeUsagePayload(usage);
-  state.usageLocations = Array.isArray(usageLocations.providers) ? usageLocations.providers : [];
+  state.usageCollectedAt = Number(usage.collectedAt || state.usageCollectedAt || 0);
+  renderUsage();
+  if (!state.usage.length && usage.refreshing === true) {
+    window.setTimeout(() => refreshUsage().catch(showError), 2_000);
+  }
+}
+
+async function refreshUsageLocations() {
+  const locations = await fetchJson("/api/usage-locations");
+  state.usageLocations = Array.isArray(locations.providers) ? locations.providers : [];
+  renderUsageLocations();
+}
+
+function syncDebugState() {
   window.__agentWatchDebug = {
     usage: state.usage,
     usageLocations: state.usageLocations,
     providerHistory: state.providerHistory,
     updatedAt: Date.now(),
   };
-  render();
+}
+
+function latestTimestamp(points) {
+  return (points || []).reduce((latest, point) => Math.max(latest, Number(point.ts || 0)), 0);
+}
+
+function mergeHistoryPoints(current, incoming) {
+  return mergeRecentPoints(current, incoming, (point) => String(point.ts || 0));
+}
+
+function mergeProviderHistoryPoints(current, incoming) {
+  return mergeRecentPoints(
+    current,
+    incoming,
+    (point) => `${point.ts || 0}:${point.providerKey || point.provider_key || "unknown"}`,
+  );
+}
+
+function mergeRecentPoints(current, incoming, keyFor) {
+  const cutoff = Math.floor(Date.now() / 1000) - 180 * 60;
+  const merged = new Map();
+  for (const point of [...(current || []), ...(incoming || [])]) {
+    if (Number(point.ts || 0) >= cutoff) merged.set(keyFor(point), point);
+  }
+  return [...merged.values()].sort((left, right) => Number(left.ts || 0) - Number(right.ts || 0));
+}
+
+function schedulePoll(name, task, delay) {
+  window.clearTimeout(pollTimers.get(name));
+  const run = async () => {
+    if (document.visibilityState === "hidden") return;
+    if (pollInFlight.has(name)) return;
+    pollInFlight.add(name);
+    try {
+      await task();
+      syncDebugState();
+    } catch (error) {
+      showError(error);
+    } finally {
+      pollInFlight.delete(name);
+      if (document.visibilityState !== "hidden") {
+        pollTimers.set(name, window.setTimeout(run, delay));
+      }
+    }
+  };
+  pollTimers.set(name, window.setTimeout(run, delay));
+}
+
+function startPolling() {
+  schedulePoll("live", refreshLive, LIVE_REFRESH_MS);
+  schedulePoll("activity", refreshActivity, ACTIVITY_REFRESH_MS);
+  schedulePoll("usage", refreshUsage, USAGE_REFRESH_MS);
+  schedulePoll("metadata", refreshMetadata, META_REFRESH_MS);
+}
+
+function stopPolling() {
+  for (const timer of pollTimers.values()) window.clearTimeout(timer);
+  pollTimers.clear();
 }
 
 function render() {
@@ -1195,8 +1314,10 @@ async function refreshUsageOnly() {
   state.quotaRefreshStatus = "loading";
   renderUsage();
   try {
-    const usage = await fetchJson("/api/usage?days=366");
-    state.usage = normalizeUsagePayload(usage);
+    const previousCollectedAt = state.usageCollectedAt;
+    const response = await fetch("/api/usage/refresh", { method: "POST" });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    await waitForUsageRefresh(previousCollectedAt);
     state.quotaRefreshStatus = "done";
     renderUsage();
   } finally {
@@ -1205,6 +1326,21 @@ async function refreshUsageOnly() {
       renderUsage();
     }, 1200);
   }
+}
+
+async function waitForUsageRefresh(previousCollectedAt) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+    const payload = await fetchJson("/api/usage?days=366");
+    const collectedAt = Number(payload.collectedAt || 0);
+    if (Array.isArray(payload.usage) && payload.usage.length) {
+      state.usage = normalizeUsagePayload(payload);
+      state.usageCollectedAt = collectedAt;
+      renderUsage();
+    }
+    if (payload.refreshing !== true && collectedAt >= previousCollectedAt) return;
+  }
+  throw new Error("로그 재스캔 시간이 초과되었습니다.");
 }
 
 async function checkForUpdate() {
@@ -1296,7 +1432,7 @@ function roundRect(ctx, x, y, width, height, radius) {
 }
 
 $("refreshBtn").addEventListener("click", () => {
-  refresh().catch(showError);
+  Promise.all([refreshLive(), refreshActivity()]).catch(showError);
 });
 
 $("downloadRemoteReportBtn").addEventListener("click", downloadRemoteReport);
@@ -1322,6 +1458,18 @@ $("portInput").addEventListener("keydown", (event) => {
 });
 $("tokenGrass").addEventListener("scroll", updateTokenGrassOverflow);
 window.addEventListener("resize", () => syncTokenGrassViewport(state.tokenGrassStickToToday));
+$("usageLocationPanel").addEventListener("toggle", (event) => {
+  if (event.currentTarget.open && !state.usageLocations.length) {
+    refreshUsageLocations().catch(showError);
+  }
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    stopPolling();
+    return;
+  }
+  refresh().catch(showError).finally(startPolling);
+});
 
 function showError(error) {
   console.error(error);
@@ -1331,5 +1479,4 @@ function showError(error) {
   }
 }
 
-refresh().catch(showError);
-setInterval(() => refresh().catch(showError), 2500);
+refresh().catch(showError).finally(startPolling);

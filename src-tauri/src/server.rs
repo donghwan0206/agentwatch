@@ -11,7 +11,10 @@ use serde_json::json;
 use std::{
     collections::{BTreeMap, VecDeque},
     net::{IpAddr, SocketAddr, TcpListener as StdTcpListener},
-    sync::{Arc, RwLock},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, RwLock,
+    },
     thread,
     time::Duration,
 };
@@ -51,6 +54,8 @@ struct UsageQuery {
 #[derive(Deserialize)]
 struct HistoryQuery {
     minutes: Option<i64>,
+    since: Option<i64>,
+    bucket: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -66,6 +71,13 @@ struct MonitorStore {
     port: u16,
     tray_enabled: bool,
     runtime: &'static str,
+    usage_cache: RwLock<Option<CachedUsage>>,
+    usage_refreshing: AtomicBool,
+}
+
+struct CachedUsage {
+    collected_at: i64,
+    responses: Vec<usage::UsageResponse>,
 }
 
 struct MonitorData {
@@ -121,6 +133,8 @@ fn spawn_server_with_runtime(
                 runtime_name,
             ));
             spawn_monitor_loop(Arc::clone(&state));
+            request_usage_refresh(Arc::clone(&state));
+            spawn_usage_loop(Arc::clone(&state));
             let app = Router::new()
                 .route("/", get(index))
                 .route("/app.js", get(app_js))
@@ -134,6 +148,7 @@ fn spawn_server_with_runtime(
                 .route("/api/update/install", post(update_install_route))
                 .route("/api/snapshot", get(snapshot))
                 .route("/api/usage", get(usage_route))
+                .route("/api/usage/refresh", post(refresh_usage_route))
                 .route("/api/usage-locations", get(usage_locations_route))
                 .route("/api/history", get(history))
                 .route("/api/provider-history", get(provider_history))
@@ -274,6 +289,8 @@ impl MonitorStore {
             port,
             tray_enabled,
             runtime,
+            usage_cache: RwLock::new(None),
+            usage_refreshing: AtomicBool::new(false),
         }
     }
 
@@ -324,9 +341,9 @@ impl MonitorStore {
             .clone()
     }
 
-    fn history_since(&self, since: i64) -> Vec<activity_log::HistoryPoint> {
+    fn history_since(&self, since: i64, bucket_seconds: i64) -> Vec<activity_log::HistoryPoint> {
         if let Some(log) = &self.activity_log {
-            if let Ok(history) = log.history_since(since) {
+            if let Ok(history) = log.history_since(since, bucket_seconds) {
                 return history;
             }
         }
@@ -359,14 +376,34 @@ impl MonitorStore {
     fn provider_history_since(
         &self,
         since: i64,
+        bucket_seconds: i64,
         limit: usize,
     ) -> Vec<activity_log::ProviderHistoryPoint> {
         if let Some(log) = &self.activity_log {
-            if let Ok(history) = log.provider_history_since(since, limit) {
+            if let Ok(history) = log.provider_history_since(since, bucket_seconds, limit) {
                 return history;
             }
         }
         Vec::new()
+    }
+
+    fn usage_payload(&self, days: i64) -> serde_json::Value {
+        let refreshing = self.usage_refreshing.load(Ordering::Acquire);
+        let cache = self.usage_cache.read().expect("usage cache lock");
+        match cache.as_ref() {
+            Some(cache) => json!({
+                "usage": usage::limit_days(&cache.responses, days),
+                "cached": true,
+                "refreshing": refreshing,
+                "collectedAt": cache.collected_at,
+            }),
+            None => json!({
+                "usage": [],
+                "cached": false,
+                "refreshing": refreshing,
+                "collectedAt": null,
+            }),
+        }
     }
 }
 
@@ -388,6 +425,39 @@ fn spawn_monitor_loop(state: Arc<MonitorStore>) {
             state.record(sampler.snapshot());
         }
     });
+}
+
+fn spawn_usage_loop(state: Arc<MonitorStore>) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            request_usage_refresh(Arc::clone(&state));
+        }
+    });
+}
+
+fn request_usage_refresh(state: Arc<MonitorStore>) -> bool {
+    if state
+        .usage_refreshing
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return false;
+    }
+    tokio::spawn(async move {
+        let collected = tokio::task::spawn_blocking(|| usage::collect_all(366)).await;
+        if let Ok(responses) = collected {
+            let mut cache = state.usage_cache.write().expect("usage cache lock");
+            *cache = Some(CachedUsage {
+                collected_at: chrono::Local::now().timestamp(),
+                responses,
+            });
+        }
+        state.usage_refreshing.store(false, Ordering::Release);
+    });
+    true
 }
 
 fn event_level(status: &str) -> &'static str {
@@ -486,13 +556,39 @@ async fn snapshot(State(state): State<Arc<MonitorStore>>) -> Json<monitor::Snaps
     Json(state.snapshot())
 }
 
-async fn usage_route(Query(query): Query<UsageQuery>) -> Json<serde_json::Value> {
+async fn usage_route(
+    State(state): State<Arc<MonitorStore>>,
+    Query(query): Query<UsageQuery>,
+) -> Json<serde_json::Value> {
     let days = query.days.unwrap_or(91);
-    Json(json!({ "usage": usage::collect_all(days) }))
+    for _ in 0..100 {
+        if state
+            .usage_cache
+            .read()
+            .expect("usage cache lock")
+            .is_some()
+            || !state.usage_refreshing.load(Ordering::Acquire)
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    Json(state.usage_payload(days))
+}
+
+async fn refresh_usage_route(State(state): State<Arc<MonitorStore>>) -> Json<serde_json::Value> {
+    let started = request_usage_refresh(Arc::clone(&state));
+    Json(json!({
+        "started": started,
+        "refreshing": state.usage_refreshing.load(Ordering::Acquire),
+    }))
 }
 
 async fn usage_locations_route() -> Json<serde_json::Value> {
-    Json(json!({ "providers": usage::usage_locations() }))
+    let providers = tokio::task::spawn_blocking(usage::usage_locations)
+        .await
+        .unwrap_or_default();
+    Json(json!({ "providers": providers }))
 }
 
 async fn history(
@@ -500,8 +596,11 @@ async fn history(
     Query(query): Query<HistoryQuery>,
 ) -> Json<serde_json::Value> {
     let minutes = query.minutes.unwrap_or(180).clamp(1, 24 * 60);
-    let since = chrono::Local::now().timestamp() - minutes * 60;
-    Json(json!({ "history": state.history_since(since) }))
+    let floor = chrono::Local::now().timestamp() - minutes * 60;
+    let since = query.since.unwrap_or(floor).max(floor);
+    let bucket = query.bucket.unwrap_or(30).clamp(10, 300);
+    let history = state.history_since(since, bucket);
+    Json(json!({ "history": history, "since": since, "bucketSeconds": bucket }))
 }
 
 async fn provider_history(
@@ -509,8 +608,15 @@ async fn provider_history(
     Query(query): Query<HistoryQuery>,
 ) -> Json<serde_json::Value> {
     let minutes = query.minutes.unwrap_or(180).clamp(1, 24 * 60);
-    let since = chrono::Local::now().timestamp() - minutes * 60;
-    Json(json!({ "providerHistory": state.provider_history_since(since, 20000) }))
+    let floor = chrono::Local::now().timestamp() - minutes * 60;
+    let since = query.since.unwrap_or(floor).max(floor);
+    let bucket = query.bucket.unwrap_or(30).clamp(10, 300);
+    let history = state.provider_history_since(since, bucket, 20000);
+    Json(json!({
+        "providerHistory": history,
+        "since": since,
+        "bucketSeconds": bucket,
+    }))
 }
 
 async fn remote_check(

@@ -5,10 +5,10 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageResponse {
     provider: String,
@@ -24,7 +24,7 @@ pub struct UsageResponse {
     notes: Vec<String>,
 }
 
-#[derive(Default, Serialize)]
+#[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct QuotaMeta {
     source: String,
@@ -34,7 +34,7 @@ struct QuotaMeta {
     stale: bool,
 }
 
-#[derive(Default, Serialize)]
+#[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct UsageTotals {
     today_tokens: i64,
@@ -53,7 +53,7 @@ struct DailyUsage {
     models: BTreeMap<String, i64>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Quota {
     label: String,
@@ -69,6 +69,7 @@ struct Quota {
     observed_at: i64,
 }
 
+#[derive(Clone)]
 struct QuotaSnapshot {
     source: String,
     source_path: PathBuf,
@@ -76,7 +77,7 @@ struct QuotaSnapshot {
     quotas: Vec<Quota>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ThreadUsage {
     id: String,
@@ -86,7 +87,7 @@ struct ThreadUsage {
     updated_at: i64,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GoalUsage {
     thread_id: String,
@@ -121,6 +122,11 @@ struct SourceCandidate {
     provider: &'static str,
     path: PathBuf,
     format: SourceFormat,
+}
+
+struct SourceScanState {
+    signature: String,
+    cursor: u64,
 }
 
 #[derive(Clone, Copy)]
@@ -227,6 +233,18 @@ pub fn collect_all(days: i64) -> Vec<UsageResponse> {
     }
 
     responses
+}
+
+pub fn limit_days(responses: &[UsageResponse], days: i64) -> Vec<UsageResponse> {
+    let days = days.clamp(1, 366);
+    let since = local_day(Local::now().timestamp() - days * 86400);
+    let now = Local::now().timestamp();
+    let mut limited = responses.to_vec();
+    for response in &mut limited {
+        response.daily.retain(|day| day.date >= since);
+        apply_daily_totals(response, now);
+    }
+    limited
 }
 
 fn usage_response(
@@ -373,11 +391,17 @@ fn sync_usage_cache(notes: &mut Vec<String>) -> Option<PathBuf> {
         let Some(signature) = source_signature(&source.path) else {
             continue;
         };
-        if source_already_scanned(&conn, &source.provider, &source.path, &signature) {
+        let previous = source_scan_state(&conn, source.provider, &source.path);
+        if previous
+            .as_ref()
+            .map(|state| state.signature == signature)
+            .unwrap_or(false)
+        {
             continue;
         }
-        match collect_source_events(&source) {
-            Ok(events) => {
+        let cursor = usable_source_cursor(&source, previous.as_ref());
+        match collect_source_events_from(&source, cursor) {
+            Ok((events, next_cursor)) => {
                 if let Err(error) = upsert_token_events(&mut conn, &events) {
                     notes.push(format!(
                         "{} token cache update failed for {}: {error}",
@@ -386,7 +410,13 @@ fn sync_usage_cache(notes: &mut Vec<String>) -> Option<PathBuf> {
                     ));
                     continue;
                 }
-                let _ = mark_source_scanned(&conn, &source.provider, &source.path, &signature);
+                let _ = mark_source_scanned(
+                    &conn,
+                    source.provider,
+                    &source.path,
+                    &signature,
+                    next_cursor,
+                );
             }
             Err(error) => notes.push(format!(
                 "{} token log scan failed for {}: {error}",
@@ -396,6 +426,31 @@ fn sync_usage_cache(notes: &mut Vec<String>) -> Option<PathBuf> {
         }
     }
     Some(path)
+}
+
+fn usable_source_cursor(source: &SourceCandidate, previous: Option<&SourceScanState>) -> u64 {
+    let cursor = previous
+        .map(|state| {
+            if state.cursor > 0 {
+                state.cursor
+            } else {
+                state
+                    .signature
+                    .split(':')
+                    .next()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .unwrap_or(0)
+            }
+        })
+        .unwrap_or(0);
+    match source.format {
+        SourceFormat::CodexSqlite => previous.map(|state| state.cursor).unwrap_or(0),
+        _ => fs::metadata(&source.path)
+            .ok()
+            .filter(|metadata| metadata.len() >= cursor)
+            .map(|_| cursor)
+            .unwrap_or(0),
+    }
 }
 
 fn init_usage_cache(conn: &Connection) -> rusqlite::Result<()> {
@@ -419,10 +474,25 @@ fn init_usage_cache(conn: &Connection) -> rusqlite::Result<()> {
             provider TEXT NOT NULL,
             path TEXT NOT NULL,
             signature TEXT NOT NULL,
+            cursor INTEGER NOT NULL DEFAULT 0,
             scanned_at INTEGER NOT NULL,
             PRIMARY KEY (provider, path)
         );",
-    )
+    )?;
+    if !table_has_column(conn, "token_sources", "cursor")? {
+        conn.execute(
+            "ALTER TABLE token_sources ADD COLUMN cursor INTEGER NOT NULL DEFAULT 0",
+            [],
+        )?;
+    }
+    Ok(())
+}
+
+fn table_has_column(conn: &Connection, table: &str, column: &str) -> rusqlite::Result<bool> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let names = stmt.query_map([], |row| row.get::<_, String>(1))?;
+    let found = names.flatten().any(|name| name == column);
+    Ok(found)
 }
 
 fn usage_source_candidates() -> Vec<SourceCandidate> {
@@ -796,14 +866,18 @@ fn source_signature(path: &Path) -> Option<String> {
     Some(signature)
 }
 
-fn source_already_scanned(conn: &Connection, provider: &str, path: &Path, signature: &str) -> bool {
+fn source_scan_state(conn: &Connection, provider: &str, path: &Path) -> Option<SourceScanState> {
     conn.query_row(
-        "SELECT signature FROM token_sources WHERE provider = ?1 AND path = ?2",
+        "SELECT signature, cursor FROM token_sources WHERE provider = ?1 AND path = ?2",
         params![provider, path.display().to_string()],
-        |row| row.get::<_, String>(0),
+        |row| {
+            Ok(SourceScanState {
+                signature: row.get(0)?,
+                cursor: row.get::<_, i64>(1)?.max(0) as u64,
+            })
+        },
     )
-    .map(|existing| existing == signature)
-    .unwrap_or(false)
+    .ok()
 }
 
 fn mark_source_scanned(
@@ -811,53 +885,83 @@ fn mark_source_scanned(
     provider: &str,
     path: &Path,
     signature: &str,
+    cursor: u64,
 ) -> rusqlite::Result<()> {
     conn.execute(
-        "INSERT INTO token_sources (provider, path, signature, scanned_at)
-         VALUES (?1, ?2, ?3, ?4)
+        "INSERT INTO token_sources (provider, path, signature, cursor, scanned_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)
          ON CONFLICT(provider, path) DO UPDATE SET
             signature = excluded.signature,
+            cursor = excluded.cursor,
             scanned_at = excluded.scanned_at",
         params![
             provider,
             path.display().to_string(),
             signature,
+            cursor.min(i64::MAX as u64) as i64,
             Local::now().timestamp()
         ],
     )?;
     Ok(())
 }
 
-fn collect_source_events(source: &SourceCandidate) -> Result<Vec<TokenEvent>, String> {
+fn collect_source_events_from(
+    source: &SourceCandidate,
+    cursor: u64,
+) -> Result<(Vec<TokenEvent>, u64), String> {
     match source.format {
-        SourceFormat::CodexSqlite => collect_codex_sqlite_events(&source.path),
-        SourceFormat::CodexJsonl => collect_codex_jsonl_events(&source.path),
-        SourceFormat::ClaudeJsonl => collect_claude_jsonl_events(&source.path),
-        SourceFormat::GenericJson => collect_generic_json_events(source.provider, &source.path),
-        SourceFormat::GenericJsonl => collect_generic_jsonl_events(source.provider, &source.path),
+        SourceFormat::CodexSqlite => collect_codex_sqlite_events_from(&source.path, cursor),
+        SourceFormat::CodexJsonl => collect_codex_jsonl_events_from(&source.path, cursor),
+        SourceFormat::ClaudeJsonl => collect_claude_jsonl_events_from(&source.path, cursor),
+        SourceFormat::GenericJson => collect_generic_json_events(source.provider, &source.path)
+            .map(|events| {
+                (
+                    events,
+                    fs::metadata(&source.path)
+                        .map(|item| item.len())
+                        .unwrap_or(0),
+                )
+            }),
+        SourceFormat::GenericJsonl => {
+            collect_generic_jsonl_events_from(source.provider, &source.path, cursor)
+        }
     }
 }
 
-fn collect_codex_sqlite_events(path: &PathBuf) -> Result<Vec<TokenEvent>, String> {
+fn collect_codex_sqlite_events_from(
+    path: &PathBuf,
+    cursor: u64,
+) -> Result<(Vec<TokenEvent>, u64), String> {
     let conn = open_readonly(path).map_err(|error| error.to_string())?;
     let mut stmt = conn
         .prepare(
-            "SELECT ts, feedback_log_body FROM logs
-             WHERE target = 'codex_core::session::turn'
-               AND feedback_log_body LIKE '%total_usage_tokens=%'
-               AND feedback_log_body NOT LIKE '%ToolCall:%'
-             ORDER BY ts ASC
+            "SELECT rowid, ts, target, feedback_log_body FROM logs
+             WHERE rowid > ?1
+             ORDER BY rowid ASC
              LIMIT 100000",
         )
         .map_err(|error| error.to_string())?;
     let rows = stmt
-        .query_map([], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        .query_map([cursor.min(i64::MAX as u64) as i64], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
         })
         .map_err(|error| error.to_string())?;
     let mut by_turn: HashMap<String, TokenEvent> = HashMap::new();
+    let mut next_cursor = cursor;
     for row in rows.flatten() {
-        let (ts, body) = row;
+        let (rowid, ts, target, body) = row;
+        next_cursor = next_cursor.max(rowid.max(0) as u64);
+        if target != "codex_core::session::turn"
+            || !body.contains("total_usage_tokens=")
+            || body.contains("ToolCall:")
+        {
+            continue;
+        }
         let Some(turn_id) = extract_after(&body, "turn_id=") else {
             continue;
         };
@@ -887,17 +991,33 @@ fn collect_codex_sqlite_events(path: &PathBuf) -> Result<Vec<TokenEvent>, String
             );
         }
     }
-    Ok(by_turn.into_values().collect())
+    Ok((by_turn.into_values().collect(), next_cursor))
 }
 
-fn collect_codex_jsonl_events(path: &PathBuf) -> Result<Vec<TokenEvent>, String> {
+fn collect_codex_jsonl_events_from(
+    path: &PathBuf,
+    cursor: u64,
+) -> Result<(Vec<TokenEvent>, u64), String> {
     let file = fs::File::open(path).map_err(|error| error.to_string())?;
+    let mut reader = BufReader::new(file);
+    reader
+        .seek(SeekFrom::Start(cursor))
+        .map_err(|error| error.to_string())?;
     let mut events = Vec::new();
-    for (index, line) in BufReader::new(file)
-        .lines()
-        .map_while(Result::ok)
-        .enumerate()
-    {
+    let mut next_cursor = cursor;
+    loop {
+        let line_offset = next_cursor;
+        let mut line = String::new();
+        let bytes = reader
+            .read_line(&mut line)
+            .map_err(|error| error.to_string())?;
+        if bytes == 0 {
+            break;
+        }
+        if !line.ends_with('\n') && serde_json::from_str::<Value>(&line).is_err() {
+            break;
+        }
+        next_cursor += bytes as u64;
         if !line.contains("token_count") && !line.contains("last_token_usage") {
             continue;
         }
@@ -933,7 +1053,7 @@ fn collect_codex_jsonl_events(path: &PathBuf) -> Result<Vec<TokenEvent>, String>
             .to_string();
         events.push(TokenEvent {
             provider: "codex".to_string(),
-            source_id: format!("jsonl:{}:{index}", path.display()),
+            source_id: format!("jsonl:{}:{line_offset}", path.display()),
             ts,
             date: local_day(ts),
             model,
@@ -941,17 +1061,33 @@ fn collect_codex_jsonl_events(path: &PathBuf) -> Result<Vec<TokenEvent>, String>
             source_path: path.clone(),
         });
     }
-    Ok(events)
+    Ok((events, next_cursor))
 }
 
-fn collect_claude_jsonl_events(path: &PathBuf) -> Result<Vec<TokenEvent>, String> {
+fn collect_claude_jsonl_events_from(
+    path: &PathBuf,
+    cursor: u64,
+) -> Result<(Vec<TokenEvent>, u64), String> {
     let file = fs::File::open(path).map_err(|error| error.to_string())?;
+    let mut reader = BufReader::new(file);
+    reader
+        .seek(SeekFrom::Start(cursor))
+        .map_err(|error| error.to_string())?;
     let mut events = Vec::new();
-    for (index, line) in BufReader::new(file)
-        .lines()
-        .map_while(Result::ok)
-        .enumerate()
-    {
+    let mut next_cursor = cursor;
+    loop {
+        let line_offset = next_cursor;
+        let mut line = String::new();
+        let bytes = reader
+            .read_line(&mut line)
+            .map_err(|error| error.to_string())?;
+        if bytes == 0 {
+            break;
+        }
+        if !line.ends_with('\n') && serde_json::from_str::<Value>(&line).is_err() {
+            break;
+        }
+        next_cursor += bytes as u64;
         if !line.contains("\"usage\"") {
             continue;
         }
@@ -978,7 +1114,7 @@ fn collect_claude_jsonl_events(path: &PathBuf) -> Result<Vec<TokenEvent>, String
             .pointer("/message/id")
             .and_then(Value::as_str)
             .map(|id| format!("message:{id}"))
-            .unwrap_or_else(|| format!("jsonl:{}:{index}", path.display()));
+            .unwrap_or_else(|| format!("jsonl:{}:{line_offset}", path.display()));
         events.push(TokenEvent {
             provider: "claude".to_string(),
             source_id,
@@ -989,7 +1125,7 @@ fn collect_claude_jsonl_events(path: &PathBuf) -> Result<Vec<TokenEvent>, String
             source_path: path.clone(),
         });
     }
-    Ok(events)
+    Ok((events, next_cursor))
 }
 
 fn collect_generic_json_events(provider: &str, path: &PathBuf) -> Result<Vec<TokenEvent>, String> {
@@ -1013,14 +1149,31 @@ fn collect_generic_json_events(provider: &str, path: &PathBuf) -> Result<Vec<Tok
     Ok(events)
 }
 
-fn collect_generic_jsonl_events(provider: &str, path: &PathBuf) -> Result<Vec<TokenEvent>, String> {
+fn collect_generic_jsonl_events_from(
+    provider: &str,
+    path: &PathBuf,
+    cursor: u64,
+) -> Result<(Vec<TokenEvent>, u64), String> {
     let file = fs::File::open(path).map_err(|error| error.to_string())?;
+    let mut reader = BufReader::new(file);
+    reader
+        .seek(SeekFrom::Start(cursor))
+        .map_err(|error| error.to_string())?;
     let mut events = Vec::new();
-    for (index, line) in BufReader::new(file)
-        .lines()
-        .map_while(Result::ok)
-        .enumerate()
-    {
+    let mut next_cursor = cursor;
+    loop {
+        let line_offset = next_cursor;
+        let mut line = String::new();
+        let bytes = reader
+            .read_line(&mut line)
+            .map_err(|error| error.to_string())?;
+        if bytes == 0 {
+            break;
+        }
+        if !line.ends_with('\n') && serde_json::from_str::<Value>(&line).is_err() {
+            break;
+        }
+        next_cursor += bytes as u64;
         if !line.to_ascii_lowercase().contains("token") {
             continue;
         }
@@ -1031,13 +1184,13 @@ fn collect_generic_jsonl_events(provider: &str, path: &PathBuf) -> Result<Vec<To
         collect_json_usage_values(
             provider,
             path,
-            &format!("line-{index}"),
+            &format!("byte-{line_offset}"),
             &json,
             ts,
             &mut events,
         );
     }
-    Ok(events)
+    Ok((events, next_cursor))
 }
 
 fn collect_json_usage_values(
@@ -1266,9 +1419,8 @@ fn collect_sqlite_quota_snapshot(path: &PathBuf) -> Option<QuotaSnapshot> {
     };
     let Ok(mut stmt) = conn.prepare(
         "SELECT ts, feedback_log_body FROM logs
-         WHERE feedback_log_body LIKE '%rate_limits%'
-         ORDER BY ts DESC, ts_nanos DESC
-         LIMIT 200",
+         ORDER BY rowid DESC
+         LIMIT 5000",
     ) else {
         return None;
     };
@@ -1279,6 +1431,9 @@ fn collect_sqlite_quota_snapshot(path: &PathBuf) -> Option<QuotaSnapshot> {
     while let Ok(Some(row)) = rows.next() {
         let ts: i64 = row.get(0).unwrap_or(0);
         let body: String = row.get(1).unwrap_or_default();
+        if !body.contains("rate_limits") {
+            continue;
+        }
         let quotas = quotas_from_message(&body, ts);
         if !quotas.is_empty() {
             let snapshot = QuotaSnapshot {
@@ -1346,11 +1501,11 @@ fn collect_session_quota_snapshot() -> Option<QuotaSnapshot> {
     files.reverse();
 
     let mut latest: Option<QuotaSnapshot> = None;
-    for path in files.into_iter().take(80) {
-        let Ok(file) = fs::File::open(&path) else {
+    for path in files.into_iter().take(8) {
+        let Ok(lines) = read_recent_lines(&path, 1024 * 1024) else {
             continue;
         };
-        for line in BufReader::new(file).lines().map_while(Result::ok) {
+        for line in lines.into_iter().rev() {
             if !line.contains("\"rate_limits\"") {
                 continue;
             }
@@ -1371,10 +1526,27 @@ fn collect_session_quota_snapshot() -> Option<QuotaSnapshot> {
                 {
                     latest = Some(snapshot);
                 }
+                break;
             }
         }
     }
     latest
+}
+
+fn read_recent_lines(path: &Path, max_bytes: u64) -> std::io::Result<Vec<String>> {
+    let mut file = fs::File::open(path)?;
+    let len = file.metadata()?.len();
+    let start = len.saturating_sub(max_bytes);
+    file.seek(SeekFrom::Start(start))?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    let body = String::from_utf8_lossy(&bytes);
+    let body = if start > 0 {
+        body.split_once('\n').map(|(_, rest)| rest).unwrap_or("")
+    } else {
+        body.as_ref()
+    };
+    Ok(body.lines().map(str::to_string).collect())
 }
 
 fn collect_jsonl_files(dir: &Path, files: &mut Vec<PathBuf>) {
@@ -1614,7 +1786,8 @@ fn local_day(ts: i64) -> String {
 mod tests {
     use super::*;
     use rusqlite::Connection;
-    use std::fs;
+    use std::fs::{self, OpenOptions};
+    use std::io::Write;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -1740,7 +1913,7 @@ mod tests {
         )
         .expect("write temp claude jsonl");
 
-        let events = collect_claude_jsonl_events(&path).expect("collect claude usage");
+        let (events, _) = collect_claude_jsonl_events_from(&path, 0).expect("collect claude usage");
         let _ = fs::remove_file(&path);
 
         assert_eq!(events.len(), 1);
@@ -1749,6 +1922,72 @@ mod tests {
         assert_eq!(events[0].model, "claude-opus");
         assert_eq!(events[0].tokens, 36);
         assert_eq!(events[0].date, "2026-07-10");
+    }
+
+    #[test]
+    fn jsonl_collection_resumes_from_the_last_byte() {
+        let path = temp_db_path("agentwatch-claude-incremental").with_extension("jsonl");
+        fs::write(
+            &path,
+            "{\"timestamp\":\"2026-07-10T12:00:00Z\",\"message\":{\"id\":\"msg_1\",\"model\":\"claude\",\"usage\":{\"input_tokens\":5,\"output_tokens\":7}}}\n",
+        )
+        .expect("write first event");
+
+        let (first, cursor) =
+            collect_claude_jsonl_events_from(&path, 0).expect("collect first event");
+        let mut file = OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .expect("open append log");
+        writeln!(
+            file,
+            "{{\"timestamp\":\"2026-07-10T12:01:00Z\",\"message\":{{\"id\":\"msg_2\",\"model\":\"claude\",\"usage\":{{\"input_tokens\":11,\"output_tokens\":13}}}}}}"
+        )
+        .expect("append second event");
+
+        let (second, next_cursor) =
+            collect_claude_jsonl_events_from(&path, cursor).expect("collect appended event");
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].source_id, "message:msg_1");
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].source_id, "message:msg_2");
+        assert!(next_cursor > cursor);
+    }
+
+    #[test]
+    fn sqlite_collection_resumes_after_the_last_rowid() {
+        let path = temp_db_path("agentwatch-codex-incremental");
+        let conn = Connection::open(&path).expect("open codex log");
+        conn.execute_batch(
+            "CREATE TABLE logs (ts INTEGER, target TEXT, feedback_log_body TEXT);
+             INSERT INTO logs VALUES
+               (1700000000, 'codex_core::session::turn', 'turn_id=turn-a model=gpt total_usage_tokens=100');",
+        )
+        .expect("seed first row");
+
+        let (first, cursor) =
+            collect_codex_sqlite_events_from(&path, 0).expect("collect first row");
+        conn.execute(
+            "INSERT INTO logs VALUES (?1, ?2, ?3)",
+            params![
+                1700000001_i64,
+                "codex_core::session::turn",
+                "turn_id=turn-b model=gpt total_usage_tokens=200"
+            ],
+        )
+        .expect("append second row");
+
+        let (second, next_cursor) =
+            collect_codex_sqlite_events_from(&path, cursor).expect("collect appended row");
+        drop(conn);
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(first.len(), 1);
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].source_id, "sqlite:turn-b");
+        assert!(next_cursor > cursor);
     }
 
     #[test]

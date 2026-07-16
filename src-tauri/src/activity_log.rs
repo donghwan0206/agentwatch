@@ -122,16 +122,29 @@ impl ActivityLog {
         Ok(())
     }
 
-    pub fn history_since(&self, since: i64) -> rusqlite::Result<Vec<HistoryPoint>> {
+    pub fn history_since(
+        &self,
+        since: i64,
+        bucket_seconds: i64,
+    ) -> rusqlite::Result<Vec<HistoryPoint>> {
         let conn = self.conn.lock().expect("activity log lock");
         let mut stmt = conn.prepare(
-            "SELECT ts, activity_score, activity_status, active_process_count, total_cpu, total_memory
+            "SELECT (ts / ?2) * ?2 AS bucket_ts,
+                    CAST(AVG(activity_score) AS INTEGER),
+                    CASE
+                      WHEN MAX(active_process_count) = 0 THEN 'quiet'
+                      WHEN MAX(activity_score) >= 55 THEN 'busy'
+                      WHEN MAX(activity_score) >= 18 THEN 'active'
+                      ELSE 'idle'
+                    END,
+                    MAX(active_process_count), AVG(total_cpu), AVG(total_memory)
              FROM snapshots
              WHERE ts >= ?1
+             GROUP BY bucket_ts
              ORDER BY ts ASC
              LIMIT 20000",
         )?;
-        let rows = stmt.query_map([since], |row| {
+        let rows = stmt.query_map(params![since, bucket_seconds.max(1)], |row| {
             Ok(HistoryPoint {
                 ts: row.get(0)?,
                 activity_score: row.get(1)?,
@@ -166,17 +179,26 @@ impl ActivityLog {
     pub fn provider_history_since(
         &self,
         since: i64,
+        bucket_seconds: i64,
         limit: usize,
     ) -> rusqlite::Result<Vec<ProviderHistoryPoint>> {
         let conn = self.conn.lock().expect("activity log lock");
         let mut stmt = conn.prepare(
-            "SELECT ts, provider_key, provider_name, status, process_count, cpu, memory
+            "SELECT (ts / ?2) * ?2 AS bucket_ts, provider_key, MAX(provider_name),
+                    CASE
+                      WHEN MAX(process_count) = 0 THEN 'offline'
+                      WHEN MAX(cpu) >= 15.0 THEN 'busy'
+                      WHEN MAX(cpu) >= 1.0 THEN 'active'
+                      ELSE 'idle'
+                    END,
+                    MAX(process_count), AVG(cpu), AVG(memory)
              FROM provider_snapshots
-             WHERE ts >= ?1
-             ORDER BY ts ASC, provider_key ASC
-             LIMIT ?2",
+             WHERE ts >= ?1 AND process_count > 0
+             GROUP BY bucket_ts, provider_key
+             ORDER BY bucket_ts ASC, provider_key ASC
+             LIMIT ?3",
         )?;
-        let rows = stmt.query_map(params![since, limit as i64], |row| {
+        let rows = stmt.query_map(params![since, bucket_seconds.max(1), limit as i64], |row| {
             Ok(ProviderHistoryPoint {
                 ts: row.get(0)?,
                 provider_key: row.get(1)?,
@@ -292,12 +314,12 @@ mod tests {
         assert_eq!(event_rows.len(), 1);
         assert_eq!(event_rows[0].provider, "Codex");
 
-        let history = log.history_since(80).expect("read history");
+        let history = log.history_since(80, 30).expect("read history");
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].activity_status, "active");
 
         let provider_history = log
-            .provider_history_since(80, 10)
+            .provider_history_since(80, 30, 10)
             .expect("read provider history");
         assert_eq!(provider_history.len(), 1);
         assert_eq!(provider_history[0].provider_key, "codex");
@@ -325,18 +347,41 @@ mod tests {
         log.record_snapshot(&snapshot_at(120))
             .expect("record new snapshot");
 
-        let history = log.history_since(0).expect("read pruned history");
+        let history = log.history_since(0, 30).expect("read pruned history");
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].ts, 120);
 
         let provider_history = log
-            .provider_history_since(0, 10)
+            .provider_history_since(0, 30, 10)
             .expect("read pruned provider history");
         assert_eq!(provider_history.len(), 1);
         assert_eq!(provider_history[0].ts, 120);
 
         let event_rows = log.events(10).expect("read pruned events");
         assert!(event_rows.is_empty());
+
+        drop(log);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn history_queries_downsample_into_time_buckets() {
+        let path = temp_db_path();
+        let log = ActivityLog::open(path.clone()).expect("open activity log");
+        for ts in [100, 110, 140] {
+            log.record_snapshot(&snapshot_at(ts))
+                .expect("record snapshot");
+        }
+
+        let history = log.history_since(0, 30).expect("read bucketed history");
+        let provider_history = log
+            .provider_history_since(0, 30, 100)
+            .expect("read bucketed provider history");
+
+        assert_eq!(history.len(), 2);
+        assert_eq!(provider_history.len(), 2);
+        assert_eq!(history[0].ts, 90);
+        assert_eq!(history[1].ts, 120);
 
         drop(log);
         let _ = std::fs::remove_file(path);
