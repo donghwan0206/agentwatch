@@ -3,7 +3,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-SOURCE_BINARY="${AGENTWATCH_BINARY:-$ROOT_DIR/src-tauri/target/release/agentwatch-server}"
+if [[ -n "${AGENTWATCH_BINARY:-}" ]]; then
+  SOURCE_BINARY="$AGENTWATCH_BINARY"
+elif [[ -x "$SCRIPT_DIR/agentwatch-server-macOS" ]]; then
+  SOURCE_BINARY="$SCRIPT_DIR/agentwatch-server-macOS"
+else
+  SOURCE_BINARY="$ROOT_DIR/src-tauri/target/release/agentwatch-server"
+fi
 INSTALL_DIR="${AGENTWATCH_INSTALL_DIR:-$HOME/Library/Application Support/AgentWatch}"
 BINARY="${AGENTWATCH_SERVICE_BINARY:-$INSTALL_DIR/agentwatch-server}"
 PORT="${AGENTWATCH_PORT:-}"

@@ -76,7 +76,7 @@ Then open this from another device on the same network:
 http://<agent-machine-ip>:<selected-port>
 ```
 
-Create a service-only release folder for the current OS:
+Create a service-only release folder for the current OS when you explicitly want the headless background server without a tray icon:
 
 ```bash
 npm run package:local -- --assets release-assets
@@ -85,7 +85,7 @@ npm run release:readiness -- release-assets --service-only --automated-only --pl
 npm run release:status -- release-assets --service-only --platform macos
 ```
 
-`package:local` packages the Rust monitor server and service/browser verification helpers only. It does not include a desktop UI package, tray wrapper, or tray verification files. `package:service-local` is kept as a compatibility alias for the same browser-only flow.
+`package:local` packages the Rust monitor server and service/browser verification helpers only. It does not include the desktop tray app. For normal end-user installs, use the desktop release artifacts instead: on Windows, install `AgentWatch_<version>_x64-setup.exe` so AgentWatch stays in the notification area and opens the browser dashboard from the tray menu.
 The local packaging command also runs the headless smoke test, writes `lan-preflight-<platform>.json`, and includes `release-status.json` plus `release-status.md`, so automated readiness can prove the LAN browser endpoint is reachable before manual remote-client evidence exists.
 The archive command writes `agentwatch-service-release-<OS>.tar.gz` for copying to the agent machine.
 Inside a downloaded release folder, the equivalent status command is `node agentwatch-release-status.mjs . --service-only --platform macos`.
@@ -194,9 +194,9 @@ Use `--platform windows` or `--platform linux` on those systems, or omit `--plat
 
 ## Packaging Scope
 
-The supported deployment path is the Rust monitor service plus the browser dashboard it serves over LAN. The UI is not packaged as a desktop app for this flow. Any Tauri/tray code in the repository is retained as experimental scaffolding and is outside the normal release checklist. Use `npm run package:desktop-local -- ...` only when a native wrapper is explicitly requested.
+The supported end-user deployment path is the desktop tray app plus the browser dashboard it serves over LAN. The service-only archive remains available for headless deployments and intentionally has no tray icon. Use `npm run package:desktop-local -- ...` or the tagged GitHub workflow with `include_desktop: true` to produce tray-app installers.
 
-See [docs/packaging.md](docs/packaging.md) for service-only package paths and release checks.
+See [docs/packaging.md](docs/packaging.md) for desktop and service package paths and release checks.
 
 `npm test` checks the Rust server, browser UI smoke path, service release helpers, Python compatibility tests, and Rust unit tests.
 

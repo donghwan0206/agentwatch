@@ -238,9 +238,14 @@ function verifyHiddenStartupContract() {
     const windowHidden = mainWindow?.visible === false;
     const trayDefaultEnabled = /let\s+tray_enabled\s*=\s*!no_tray_mode\(\)/.test(libRs);
     const showGated =
-      /if\s+!tray_enabled\s*\|\|\s*show_window_on_start\(\)\s*\{[\s\S]*?window\.show\(\)/.test(libRs);
+      /if\s+!tray_installed\s*\|\|\s*show_window_on_start\(\)\s*\{[\s\S]*?window\.show\(\)/.test(libRs);
     const overrideEnv = libRs.includes("AGENTWATCH_SHOW_WINDOW_ON_START");
-    const ok = windowHidden && trayDefaultEnabled && showGated && overrideEnv;
+    const trayFailureFallback =
+      /Err\(error\)[\s\S]*AgentWatch tray setup failed[\s\S]*false/.test(libRs);
+    const platformDefault =
+      /cfg\(target_os = "macos"\)[\s\S]*fn\s+default_show_window_on_start\(\)\s*->\s*bool[\s\S]*false/.test(libRs) &&
+      /cfg\(not\(target_os = "macos"\)\)[\s\S]*fn\s+default_show_window_on_start\(\)\s*->\s*bool[\s\S]*true/.test(libRs);
+    const ok = windowHidden && trayDefaultEnabled && showGated && overrideEnv && trayFailureFallback && platformDefault;
     return {
       status: ok ? "passed" : "failed",
       detail: [
@@ -248,6 +253,8 @@ function verifyHiddenStartupContract() {
         `trayDefaultEnabled=${String(trayDefaultEnabled)}`,
         `showWindowGated=${String(showGated)}`,
         `overrideEnv=${String(overrideEnv)}`,
+        `trayFailureFallback=${String(trayFailureFallback)}`,
+        `platformDefault=${String(platformDefault)}`,
       ].join("; "),
     };
   } catch (error) {
@@ -296,7 +303,8 @@ function verifyTraySourceContract() {
       /tray\.set_tooltip/.test(trayRs) &&
       /fn\s+agent_monitor_icon/.test(trayRs) &&
       /Image::new_owned/.test(trayRs) &&
-      /\.icon_as_template\(true\)/.test(trayRs) &&
+      /cfg\(target_os = "macos"\)[\s\S]*\.icon_as_template\(true\)/.test(trayRs) &&
+      /cfg\(not\(target_os = "macos"\)\)[\s\S]*Image::from_bytes\(include_bytes!\("\.\.\/icons\/32x32\.png"\)\)/.test(trayRs) &&
       /tooltip:\s*format!\([\s\S]*AgentWatch monitoring[\s\S]*processes[\s\S]*CPU[\s\S]*Local[\s\S]*tooltip_lan/.test(
         trayRs,
       );

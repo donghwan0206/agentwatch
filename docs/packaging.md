@@ -154,11 +154,11 @@ npm run verify:service:lifecycle -- --yes --url http://127.0.0.1:<selected-port>
 
 Run lifecycle verification before the final `verify:service` pass. The service verifier reads the matching `service-lifecycle-<platform>.json` and records `lifecycleUninstallClean: "passed"` when recovery evidence is present.
 
-## Desktop App Scope
+## Desktop Tray App Scope
 
-The normal release does not build or ship a desktop UI package. If Tauri/tray scaffolding remains in the repository, treat it as experimental code outside the service release checklist.
+The normal end-user release is the desktop tray app. On Windows, `AgentWatch_<version>_x64-setup.exe` installs the app that stays in the notification area, keeps the embedded Rust monitor server running after the launcher/terminal is gone, and opens the browser dashboard from the tray menu. The service-only archives remain available for headless/server-style deployments, but they intentionally do not include a tray icon.
 
-When a desktop wrapper is explicitly needed, run `npm run package:desktop-local -- --assets release-assets` locally or run the manual GitHub workflow with `include_desktop: true`. That path builds native packages on each OS, verifies the packaged app smoke path, writes tray verification helpers, and uploads per-platform `agentwatch-release-<OS>` artifacts. The follow-up `desktop-release` job bundles those artifacts into:
+To build the tray app locally, run `npm run package:desktop-local -- --assets release-assets` or run the GitHub workflow with `include_desktop: true`. That path builds native packages on each OS, verifies the packaged app smoke path, writes tray verification helpers, and uploads per-platform `agentwatch-release-<OS>` artifacts. The follow-up `desktop-release` job bundles those artifacts into:
 
 - `agentwatch-desktop-release-macOS.tar.gz`
 - `agentwatch-desktop-release-Windows.tar.gz`

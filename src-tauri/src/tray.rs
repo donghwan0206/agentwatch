@@ -55,9 +55,8 @@ pub fn install(
         ],
     )?;
 
-    let tray_builder = TrayIconBuilder::with_id(TRAY_ID)
-        .icon(agent_monitor_icon())
-        .icon_as_template(true)
+    let mut tray_builder = TrayIconBuilder::with_id(TRAY_ID)
+        .icon(agent_monitor_icon()?)
         .tooltip(format!("AgentWatch monitoring on · Local {dashboard_url}"))
         .menu(&menu)
         .show_menu_on_left_click(false)
@@ -78,6 +77,11 @@ pub fn install(
                 show_main_window(tray.app_handle());
             }
         });
+
+    #[cfg(target_os = "macos")]
+    {
+        tray_builder = tray_builder.icon_as_template(true);
+    }
 
     let tray = tray_builder.build(app)?;
 
@@ -199,7 +203,8 @@ fn agent_summary(providers: &[monitor::Provider]) -> String {
     }
 }
 
-fn agent_monitor_icon() -> Image<'static> {
+#[cfg(target_os = "macos")]
+fn agent_monitor_icon() -> tauri::Result<Image<'static>> {
     let mut rgba = vec![0; (TRAY_ICON_SIZE * TRAY_ICON_SIZE * 4) as usize];
 
     // Monochrome template mask matching the app icon: rounded agent head,
@@ -220,7 +225,12 @@ fn agent_monitor_icon() -> Image<'static> {
         }
     }
 
-    Image::new_owned(rgba, TRAY_ICON_SIZE, TRAY_ICON_SIZE)
+    Ok(Image::new_owned(rgba, TRAY_ICON_SIZE, TRAY_ICON_SIZE))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn agent_monitor_icon() -> tauri::Result<Image<'static>> {
+    Image::from_bytes(include_bytes!("../icons/32x32.png"))
 }
 
 fn rounded_rect_mask(

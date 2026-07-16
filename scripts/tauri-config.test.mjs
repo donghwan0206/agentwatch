@@ -57,15 +57,18 @@ assert.match(libRs, /set_dock_visibility\(false\)/, "macOS dock icon must be hid
 assert.match(libRs, /CloseRequested[\s\S]*prevent_close\(\)[\s\S]*window\.hide\(\)/, "closing the window must hide it");
 assert.match(libRs, /let tray_enabled = !no_tray_mode\(\)/, "tray must be enabled by default");
 assert.match(libRs, /if tray_enabled[\s\S]*tray::install/, "tray install must run when tray is enabled");
+assert.match(libRs, /Err\(error\)[\s\S]*AgentWatch tray setup failed/, "tray setup failure must not terminate the monitor app");
 assert.match(libRs, /show_window_on_start\(\)/, "startup window display must be gated");
 assert.match(libRs, /AGENTWATCH_SHOW_WINDOW_ON_START/, "startup window override env var missing");
 assert.match(libRs, /tauri_plugin_updater::Builder::new\(\)\.build\(\)/, "Tauri updater plugin must be initialized");
 assert.match(libRs, /download_and_install/, "Tauri updater must install available updates");
 assert.match(
   libRs,
-  /if !tray_enabled \|\| show_window_on_start\(\)[\s\S]*window\.show\(\)[\s\S]*window\.set_focus\(\)/,
-  "main window must stay hidden on tray startup and show when tray is disabled or explicitly requested",
+  /if !tray_installed \|\| show_window_on_start\(\)[\s\S]*window\.show\(\)[\s\S]*window\.set_focus\(\)/,
+  "main window must show when tray setup fails or startup display is enabled",
 );
+assert.match(libRs, /cfg\(target_os = "macos"\)[\s\S]*fn default_show_window_on_start\(\) -> bool[\s\S]*false/, "macOS should keep tray startup hidden by default");
+assert.match(libRs, /cfg\(not\(target_os = "macos"\)\)[\s\S]*fn default_show_window_on_start\(\) -> bool[\s\S]*true/, "Windows and Linux should show the settings/dashboard window on launch");
 for (const id of ["status", "runtime", "agents", "local_url", "lan_url", "open", "quit"]) {
   assert.match(trayRs, new RegExp(`"${id}"`), `tray menu item ${id} missing`);
 }
@@ -75,7 +78,8 @@ assert.match(trayRs, /set_tooltip/, "tray tooltip updates missing");
 assert.match(trayRs, /set_title/, "tray title/status updates missing");
 assert.match(trayRs, /fn agent_monitor_icon/, "dedicated tray icon helper missing");
 assert.match(trayRs, /Image::new_owned/, "tray icon must use a generated template bitmap");
-assert.match(trayRs, /\.icon_as_template\(true\)/, "tray icon must adapt to macOS light and dark modes");
+assert.match(trayRs, /cfg\(target_os = "macos"\)[\s\S]*\.icon_as_template\(true\)/, "tray icon must adapt to macOS light and dark modes");
+assert.match(trayRs, /cfg\(not\(target_os = "macos"\)\)[\s\S]*Image::from_bytes\(include_bytes!\("\.\.\/icons\/32x32\.png"\)\)/, "Windows and Linux tray icons must use the visible color app icon");
 assert.match(trayRs, /show_main_window/, "tray open action missing");
 
 console.log("tauri config tests ok");

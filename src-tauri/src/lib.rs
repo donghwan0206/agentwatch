@@ -29,15 +29,23 @@ pub fn run() {
             let server = server::spawn_server(shared_snapshot.clone(), tray_enabled)
                 .expect("start AgentWatch server");
             let dashboard_url = format!("http://127.0.0.1:{}", server.port);
-            if tray_enabled {
-                tray::install(&app_handle, &dashboard_url, server.port, shared_snapshot)?;
-            }
+            let tray_installed = if tray_enabled {
+                match tray::install(&app_handle, &dashboard_url, server.port, shared_snapshot) {
+                    Ok(()) => true,
+                    Err(error) => {
+                        eprintln!("AgentWatch tray setup failed: {error}");
+                        false
+                    }
+                }
+            } else {
+                false
+            };
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_title(&format!("AgentWatch - running on {dashboard_url}"));
                 if let Ok(url) = tauri::Url::parse(&dashboard_url) {
                     let _ = window.navigate(url);
                 }
-                if !tray_enabled || show_window_on_start() {
+                if !tray_installed || show_window_on_start() {
                     let _ = window.show();
                     let _ = window.set_focus();
                 }
@@ -62,17 +70,30 @@ fn no_tray_mode() -> bool {
 }
 
 fn show_window_on_start() -> bool {
-    truthy_env("AGENTWATCH_SHOW_WINDOW_ON_START")
+    if let Ok(value) = std::env::var("AGENTWATCH_SHOW_WINDOW_ON_START") {
+        return truthy_value(&value);
+    }
+    default_show_window_on_start()
 }
 
 fn truthy_env(name: &str) -> bool {
-    matches!(
-        std::env::var(name)
-            .unwrap_or_default()
-            .to_ascii_lowercase()
-            .as_str(),
-        "1" | "true" | "yes"
-    )
+    std::env::var(name)
+        .map(|value| truthy_value(&value))
+        .unwrap_or(false)
+}
+
+fn truthy_value(value: &str) -> bool {
+    matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes")
+}
+
+#[cfg(target_os = "macos")]
+fn default_show_window_on_start() -> bool {
+    false
+}
+
+#[cfg(not(target_os = "macos"))]
+fn default_show_window_on_start() -> bool {
+    true
 }
 
 #[cfg(desktop)]

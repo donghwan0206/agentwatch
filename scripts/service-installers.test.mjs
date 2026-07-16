@@ -34,6 +34,8 @@ try {
   assert.match(plist, /<key>AGENTWATCH_DB<\/key>/);
   assert.match(plist, /<key>RunAtLoad<\/key>\s*<true\/>/);
   assert.match(plist, /<key>KeepAlive<\/key>\s*<true\/>/);
+  const macInstaller = readFileSync("scripts/install-service-macos.sh", "utf8");
+  assert.match(macInstaller, /agentwatch-server-macOS/, "macOS installer must prefer release-folder server binary");
 
   const macAutoHome = join(root, "mac-auto-home");
   const macAutoResult = run("bash", ["scripts/install-service-macos.sh"], {
@@ -77,6 +79,8 @@ try {
   assert.match(unit, /Environment="AGENTWATCH_PORT=8877"/);
   assert.match(unit, /Environment="AGENTWATCH_DB=.*agentwatch\.sqlite3"/);
   assert.match(unit, /WantedBy=default\.target/);
+  const linuxInstaller = readFileSync("scripts/install-service-linux.sh", "utf8");
+  assert.match(linuxInstaller, /agentwatch-server-Linux/, "Linux installer must prefer release-folder server binary");
 
   const linuxAutoConfig = join(root, "linux auto config");
   const linuxAutoData = join(root, "linux auto data");
@@ -96,6 +100,7 @@ try {
   assert.match(packageJson, /service:install:windows/, "Windows install npm script missing");
   const windowsInstall = readFileSync("scripts/install-service-windows.ps1", "utf8");
   assert.match(windowsInstall, /\[Nullable\[int\]\]\$Port = \$null/, "Windows port parameter must be optional");
+  assert.match(windowsInstall, /agentwatch-server-Windows\.exe/, "Windows installer must prefer release-folder server binary");
   assert.match(windowsInstall, /New-ScheduledTaskAction/, "Windows scheduled task action missing");
   assert.match(windowsInstall, /Copy-Item -Force -Path \$Binary -Destination \$ServiceBinary/, "Windows installer must copy the server binary into a stable user install path");
   assert.match(windowsInstall, /Installed binary: \$ServiceBinary/, "Windows dry-run output must report installed binary");

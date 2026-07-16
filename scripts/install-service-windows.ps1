@@ -14,7 +14,12 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Root = Resolve-Path (Join-Path $ScriptDir "..")
 if (-not $Binary) {
-  $Binary = Join-Path $Root "src-tauri\target\release\agentwatch-server.exe"
+  $ReleaseBinary = Join-Path $ScriptDir "agentwatch-server-Windows.exe"
+  if (Test-Path $ReleaseBinary) {
+    $Binary = $ReleaseBinary
+  } else {
+    $Binary = Join-Path $Root "src-tauri\target\release\agentwatch-server.exe"
+  }
 }
 if (-not $InstallDir) {
   if ($env:AGENTWATCH_INSTALL_DIR) {

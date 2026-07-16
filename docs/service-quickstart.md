@@ -1,6 +1,8 @@
 # AgentWatch Service Quickstart
 
-AgentWatch's default deployment is the standalone Rust monitor server. It runs on the agent machine and serves the browser UI to other devices on the same LAN. No desktop UI package is required for this mode.
+AgentWatch's default end-user deployment is the desktop tray app. On Windows, install `AgentWatch_<version>_x64-setup.exe`; it keeps the monitor running in the notification area and opens the browser dashboard from the tray menu.
+
+This service-only package is a headless advanced deployment. It has no tray icon. Use it only when you intentionally want a background server managed by LaunchAgent, systemd, or Windows Scheduled Tasks.
 
 ## 1. Install The Service
 
