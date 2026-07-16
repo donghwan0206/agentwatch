@@ -5,7 +5,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket},
     sync::{Arc, OnceLock, RwLock},
 };
-use sysinfo::{Pid, Process, ProcessesToUpdate, System};
+use sysinfo::{Pid, Process, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 #[derive(Clone)]
 struct AgentRule {
@@ -160,15 +160,27 @@ const RULES: &[AgentRule] = &[
 
 impl Sampler {
     pub fn new() -> Self {
-        let mut system = System::new_all();
-        system.refresh_processes(ProcessesToUpdate::All, true);
+        let mut system = System::new();
+        system.refresh_memory();
+        system.refresh_processes_specifics(ProcessesToUpdate::All, true, process_refresh_kind());
         Self { system }
     }
 
     pub fn snapshot(&mut self) -> Snapshot {
-        self.system.refresh_processes(ProcessesToUpdate::All, true);
+        self.system.refresh_processes_specifics(
+            ProcessesToUpdate::All,
+            true,
+            process_refresh_kind(),
+        );
         snapshot_from_system(&self.system)
     }
+}
+
+fn process_refresh_kind() -> ProcessRefreshKind {
+    ProcessRefreshKind::nothing()
+        .with_cpu()
+        .with_memory()
+        .with_cmd(UpdateKind::OnlyIfNotSet)
 }
 
 pub fn fast_snapshot() -> Snapshot {

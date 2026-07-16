@@ -112,6 +112,11 @@ assert.match(trayRs, /Agents:/, "tray menu must include active agent summary tex
 assert.match(trayRs, /fn agent_summary/, "tray menu must derive active agent summary from monitor providers");
 assert.match(trayRs, /set_tooltip/, "tray tooltip updates missing");
 assert.match(trayRs, /set_title/, "tray title/status updates missing");
+assert.match(
+  trayRs,
+  /TRAY_STATUS_INTERVAL_SECONDS: u64 = 60/,
+  "tray status must use the low-power refresh interval",
+);
 assert.match(trayRs, /fn agent_monitor_icon/, "dedicated tray icon helper missing");
 assert.match(trayRs, /Image::new_owned/, "tray icon must use a generated template bitmap");
 assert.match(trayRs, /cfg\(target_os = "macos"\)[\s\S]*\.icon_as_template\(true\)/, "tray icon must adapt to macOS light and dark modes");

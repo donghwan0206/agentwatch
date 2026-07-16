@@ -23,6 +23,8 @@ use tower_http::cors::CorsLayer;
 
 const DEFAULT_PORT: u16 = 8765;
 const FALLBACK_PORT_END: u16 = 8799;
+const MONITOR_SAMPLE_INTERVAL_SECONDS: u64 = 60;
+const USAGE_REFRESH_INTERVAL_SECONDS: u64 = 600;
 const INDEX_HTML: &str = include_str!("../../static/index.html");
 const APP_JS: &str = include_str!("../../static/app.js");
 const STYLES_CSS: &str = include_str!("../../static/styles.css");
@@ -418,7 +420,8 @@ fn spawn_monitor_loop(state: Arc<MonitorStore>) {
         let mut sampler = monitor::Sampler::new();
         tokio::time::sleep(Duration::from_secs(1)).await;
         state.record(sampler.snapshot());
-        let mut interval = tokio::time::interval(Duration::from_secs(10));
+        let mut interval =
+            tokio::time::interval(Duration::from_secs(MONITOR_SAMPLE_INTERVAL_SECONDS));
         interval.tick().await;
         loop {
             interval.tick().await;
@@ -429,7 +432,8 @@ fn spawn_monitor_loop(state: Arc<MonitorStore>) {
 
 fn spawn_usage_loop(state: Arc<MonitorStore>) {
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        let mut interval =
+            tokio::time::interval(Duration::from_secs(USAGE_REFRESH_INTERVAL_SECONDS));
         interval.tick().await;
         loop {
             interval.tick().await;

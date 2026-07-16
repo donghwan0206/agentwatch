@@ -10,6 +10,7 @@ use tauri::{
 const TRAY_ID: &str = "agentwatch";
 const TRAY_ICON_SIZE: u32 = 128;
 const TRAY_ICON_COORD_SIZE: f32 = 64.0;
+const TRAY_STATUS_INTERVAL_SECONDS: u64 = 60;
 
 pub fn install(
     app: &AppHandle,
@@ -173,7 +174,7 @@ fn start_status_loop(
         let _ = lan_url_item.set_text(&summary.lan_text);
         let _ = tray.set_tooltip(Some(summary.tooltip));
         let _ = tray.set_title(Some(summary.title));
-        thread::sleep(Duration::from_secs(10));
+        thread::sleep(Duration::from_secs(TRAY_STATUS_INTERVAL_SECONDS));
     });
 }
 

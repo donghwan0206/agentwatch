@@ -5,6 +5,7 @@ const html = readFileSync("static/index.html", "utf8");
 const js = readFileSync("static/app.js", "utf8");
 const css = readFileSync("static/styles.css", "utf8");
 const server = readFileSync("src-tauri/src/server.rs", "utf8");
+const monitorCollector = readFileSync("src-tauri/src/monitor.rs", "utf8");
 const usageCollector = readFileSync("src-tauri/src/usage.rs", "utf8");
 
 for (const marker of [
@@ -135,6 +136,35 @@ assert.doesNotMatch(
   /setInterval\(\(\) => refresh\(\)/,
   "dashboard must not launch overlapping full refreshes",
 );
+
+for (const marker of [
+  "const LIVE_REFRESH_MS = 60_000",
+  "const ACTIVITY_REFRESH_MS = 120_000",
+  "const USAGE_REFRESH_MS = 600_000",
+  "const META_REFRESH_MS = 300_000",
+  "minutes=180&bucket=60",
+]) {
+  assert.match(js, new RegExp(escapeRegExp(marker)), `dashboard low-frequency polling missing ${marker}`);
+}
+
+for (const marker of [
+  "MONITOR_SAMPLE_INTERVAL_SECONDS: u64 = 60",
+  "USAGE_REFRESH_INTERVAL_SECONDS: u64 = 600",
+]) {
+  assert.match(server, new RegExp(escapeRegExp(marker)), `server low-power interval missing ${marker}`);
+}
+
+for (const marker of [
+  "System::new()",
+  "refresh_processes_specifics",
+  "ProcessRefreshKind::nothing()",
+  "with_cpu()",
+  "with_memory()",
+  "with_cmd(UpdateKind::OnlyIfNotSet)",
+]) {
+  assert.match(monitorCollector, new RegExp(escapeRegExp(marker)), `process refresh scope missing ${marker}`);
+}
+assert.doesNotMatch(monitorCollector, /System::new_all\(\)/, "monitor must not initialize unused system metrics");
 
 for (const marker of [
   "usage_cache: RwLock<Option<CachedUsage>>",

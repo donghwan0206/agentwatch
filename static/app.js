@@ -19,10 +19,10 @@ const state = {
 };
 
 const $ = (id) => document.getElementById(id);
-const LIVE_REFRESH_MS = 5_000;
-const ACTIVITY_REFRESH_MS = 30_000;
-const USAGE_REFRESH_MS = 60_000;
-const META_REFRESH_MS = 60_000;
+const LIVE_REFRESH_MS = 60_000;
+const ACTIVITY_REFRESH_MS = 120_000;
+const USAGE_REFRESH_MS = 600_000;
+const META_REFRESH_MS = 300_000;
 const pollTimers = new Map();
 const pollInFlight = new Set();
 
@@ -71,11 +71,11 @@ async function refreshActivity() {
   const historySince = latestTimestamp(state.history);
   const providerSince = latestTimestamp(state.providerHistory);
   const historyUrl = historySince
-    ? `/api/history?minutes=180&bucket=30&since=${historySince}`
-    : "/api/history?minutes=180&bucket=30";
+    ? `/api/history?minutes=180&bucket=60&since=${historySince}`
+    : "/api/history?minutes=180&bucket=60";
   const providerUrl = providerSince
-    ? `/api/provider-history?minutes=180&bucket=30&since=${providerSince}`
-    : "/api/provider-history?minutes=180&bucket=30";
+    ? `/api/provider-history?minutes=180&bucket=60&since=${providerSince}`
+    : "/api/provider-history?minutes=180&bucket=60";
   const [history, providerHistory, events] = await Promise.all([
     fetchJson(historyUrl),
     fetchJson(providerUrl),
