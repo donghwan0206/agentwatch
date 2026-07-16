@@ -1028,7 +1028,11 @@ function formatRuntimeMode(runtime) {
   const tray = runtime.trayEnabled ? "tray on" : "tray off";
   const version = runtime.version ? `v${runtime.version}` : "version unknown";
   const portInfo = runtime.portSource ? `port ${runtime.portSource}` : "port auto";
-  return `${runtime.runtime || "runtime"} ${version} · ${platform} · ${tray} · ${portInfo}`;
+  const serviceMode =
+    runtime.monitoringService?.mode === "desktop-embedded" ? "embedded monitor" : runtime.monitoringService?.mode;
+  return [runtime.runtime || "runtime", version, platform, tray, serviceMode, portInfo]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function formatBool(value) {
@@ -1094,6 +1098,7 @@ function buildBrowserRemoteReport() {
       usageGoals: Array.isArray(usage.goals) ? "passed" : "missing",
       usageProviderCount: state.usage.length,
       runtime: runtime.runtime || null,
+      monitoringService: runtime.monitoringService || null,
       version: runtime.version || null,
       platform: runtime.platform || null,
       trayEnabled: runtime.trayEnabled === true,

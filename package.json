@@ -1,8 +1,8 @@
 {
   "name": "agentwatch",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
-  "description": "LAN browser dashboard and Rust monitor service for local LLM agents.",
+  "description": "Desktop tray app with an embedded LAN monitor for local LLM agents.",
   "scripts": {
     "tauri": "tauri",
     "dev": "cargo run --manifest-path src-tauri/Cargo.toml --bin agentwatch-server",

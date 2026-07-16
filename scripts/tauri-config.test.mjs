@@ -60,6 +60,16 @@ assert.match(
 assert.match(libRs, /set_dock_visibility\(false\)/, "macOS dock icon must be hidden");
 assert.match(libRs, /CloseRequested[\s\S]*prevent_close\(\)[\s\S]*window\.hide\(\)/, "closing the window must hide it");
 assert.match(libRs, /let tray_enabled = !no_tray_mode\(\)/, "tray must be enabled by default");
+assert.match(
+  libRs,
+  /server::spawn_server\(\s*shared_snapshot\.clone\(\),\s*tray_enabled,\s*update_state\.clone\(\)\s*\)/,
+  "desktop app must start the embedded monitor server itself",
+);
+assert.doesNotMatch(
+  libRs,
+  /Command::new|agentwatch-server/,
+  "desktop app must not require a separately launched agentwatch-server process",
+);
 assert.match(libRs, /if tray_enabled[\s\S]*tray::install/, "tray install must run when tray is enabled");
 assert.match(libRs, /Err\(error\)[\s\S]*AgentWatch tray setup failed/, "tray setup failure must not terminate the monitor app");
 assert.match(libRs, /show_window_on_start\(\)/, "startup window display must be gated");
@@ -71,9 +81,14 @@ assert.doesNotMatch(libRs, /download_and_install/, "startup must not silently in
 assert.match(serverRs, /\/api\/update\/status/, "update status endpoint missing");
 assert.match(serverRs, /\/api\/update\/check/, "update check endpoint missing");
 assert.match(serverRs, /\/api\/update\/install/, "update install endpoint missing");
+assert.match(serverRs, /"monitoringService"/, "runtime must expose monitoring service lifecycle");
+assert.match(serverRs, /"desktop-embedded"/, "desktop runtime must identify the embedded monitor service");
+assert.match(serverRs, /"closeKeepsRunning"/, "runtime must report close-to-tray monitoring behavior");
+assert.match(serverRs, /"quitStopsMonitoring"/, "runtime must report quit stops monitoring behavior");
 assert.match(indexHtml, /온에어 업데이트/, "dashboard update panel missing");
 assert.match(appJs, /\/api\/update\/check/, "dashboard update check action missing");
 assert.match(appJs, /\/api\/update\/install/, "dashboard update install action missing");
+assert.match(appJs, /embedded monitor/, "dashboard runtime text must identify embedded monitoring");
 assert.match(
   libRs,
   /if !tray_installed \|\| show_window_on_start\(\)[\s\S]*window\.show\(\)[\s\S]*window\.set_focus\(\)/,
@@ -88,6 +103,7 @@ assert.match(trayRs, /Check for updates/, "tray update check action missing");
 assert.match(trayRs, /Install update/, "tray update install action missing");
 assert.match(trayRs, /update_state\.check\(\)\.await/, "tray update check handler missing");
 assert.match(trayRs, /update_state\.install\(\)\.await/, "tray update install handler missing");
+assert.match(trayRs, /"quit" => app\.exit\(0\)/, "tray quit must terminate the desktop app and embedded monitor server");
 assert.match(trayRs, /Agents:/, "tray menu must include active agent summary text");
 assert.match(trayRs, /fn agent_summary/, "tray menu must derive active agent summary from monitor providers");
 assert.match(trayRs, /set_tooltip/, "tray tooltip updates missing");

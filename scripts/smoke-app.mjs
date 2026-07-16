@@ -52,6 +52,11 @@ try {
   assert(runtime.localUrl === `http://127.0.0.1:${selectedPort}`, "runtime.localUrl mismatch");
   assert(Array.isArray(runtime.lanUrls), "runtime.lanUrls missing");
   assert(runtime.runtime === "tauri-rust", "runtime.runtime mismatch");
+  assert(runtime.monitoringService?.mode === "desktop-embedded", "desktop monitoring service mode mismatch");
+  assert(runtime.monitoringService?.embedded === true, "desktop monitor must be embedded");
+  assert(runtime.monitoringService?.processOwner === "desktop-app", "desktop monitor process owner mismatch");
+  assert(runtime.monitoringService?.closeKeepsRunning === expectedTrayEnabled, "close-to-tray monitor behavior mismatch");
+  assert(runtime.monitoringService?.quitStopsMonitoring === true, "tray quit must stop monitoring");
   assert(runtime.name === "agentwatch", "runtime.name mismatch");
   assert(typeof runtime.version === "string" && runtime.version.length > 0, "runtime.version missing");
   assert(

@@ -1,6 +1,25 @@
 # AgentWatch Deployment
 
-AgentWatch's deployment unit is the standalone Rust monitor server. It runs on the agent machine, binds `0.0.0.0`, and serves both the browser dashboard and JSON API to other devices on the same LAN. The browser UI is not packaged as a desktop app.
+AgentWatch's normal end-user deployment unit is the desktop tray app. It runs on the agent machine, starts the Rust monitor server inside the desktop app process, binds `0.0.0.0`, and serves both the browser dashboard and JSON API to other devices on the same LAN. Closing the dashboard window keeps the embedded monitor running in the tray/menu bar; choosing Quit from the tray/menu-bar icon exits the desktop app and stops monitoring.
+
+The standalone `agentwatch-server` binary remains available for advanced headless deployments only. It is not required when the user installs the desktop app.
+
+## Desktop Tray App
+
+Install the desktop artifact for the target OS:
+
+| Platform | End-user artifact |
+| --- | --- |
+| macOS | `AgentWatch.app.tar.gz` or the macOS app bundle from the desktop archive |
+| Windows | `AgentWatch_<version>_x64-setup.exe` |
+| Linux | `AgentWatch_<version>_amd64.AppImage` |
+
+After launching the app on the monitoring machine:
+
+1. The embedded Rust monitor starts in the desktop app process.
+2. The tray/menu-bar icon remains available for Open dashboard, update checks, and Quit.
+3. The dashboard can be opened locally or from another LAN machine with `http://<agent-machine-ip>:<selected-port>`.
+4. `/api/runtime` reports `runtime: "tauri-rust"`, `trayEnabled: true`, and `monitoringService.mode: "desktop-embedded"`.
 
 ## Local Server Build
 
@@ -16,7 +35,7 @@ Build the current platform:
 npm run build
 ```
 
-Build a service-only release folder for the current platform:
+Build a service-only release folder for the current platform only when you explicitly need the headless server:
 
 ```bash
 npm run package:local -- --assets release-assets
@@ -26,7 +45,7 @@ npm run release:readiness -- release-assets --service-only --automated-only --pl
 npm run release:bundle-service -- --input service-release-assets --output release-assets
 ```
 
-This is the default deployment shape for AgentWatch: the Rust server runs on the agent machine and the UI is opened from a browser on the LAN. `package:local` skips Tauri app packaging; `package:service-local` is a compatibility alias for the same service-only flow. Replace `macos` with `windows` or `linux` on those platforms, or omit `--platform` when checking a combined all-platform release folder.
+This is the headless deployment shape for AgentWatch: the Rust server runs on the agent machine and the UI is opened from a browser on the LAN, without a tray/menu-bar app. `package:local` skips Tauri app packaging; `package:service-local` is a compatibility alias for the same service-only flow. Replace `macos` with `windows` or `linux` on those platforms, or omit `--platform` when checking a combined all-platform release folder.
 `release:archive-service` creates one local `agentwatch-service-release-<OS>.tar.gz` from a finalized service-only folder. `release:bundle-service` is for combining service-only folders downloaded from CI.
 Each service release folder also includes `release-next-steps.md` plus the `agentwatch-release-*` and `agentwatch-refresh-release-evidence.mjs` helpers, so a person who only has the extracted archive can continue remote-browser, lifecycle, status, audit, readiness, and checksum refresh work without a source checkout.
 
@@ -59,7 +78,7 @@ http://<agent-machine-ip>:<selected-port>
 
 ## Service Install
 
-Install the built Rust server as a user-level background service on the agent machine. This is the recommended long-running deployment mode because the UI is just the browser dashboard served by `agentwatch-server`.
+Install the built Rust server as a user-level background service on the agent machine only when you want a headless deployment. For normal desktop use, install and launch the tray app instead; it already includes the background monitor.
 
 macOS uses a LaunchAgent:
 

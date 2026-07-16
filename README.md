@@ -12,15 +12,22 @@ It is intentionally local-first:
 - Shows a GitHub-style daily token activity grid from local Codex token-usage events.
 - Reads process metadata only. It does not read prompts, replies, source files, terminal buffers, or project contents.
 
-## Rust Monitor Server
+## Desktop Tray App
 
-The primary runtime is a standalone Rust server. It runs on the machine that hosts the agents and serves the browser UI directly:
+The primary end-user runtime is the desktop tray app. Install and run it on the machine that hosts the agents. The app starts the Rust monitor server inside the desktop app process, serves the same browser dashboard over LAN, and stays alive in the tray/menu bar after the dashboard window is closed.
 
 - `sysinfo` reads local processes without shelling out to `ps`.
-- `axum` serves the same LAN dashboard on `0.0.0.0`, using `8765` by default and falling back through `8799` if needed.
+- `axum` runs as the embedded background monitor inside the desktop app, binds `0.0.0.0`, uses `8765` by default, and falls back through `8799` if needed.
 - Activity snapshots and status changes are persisted to SQLite.
-- The same process serves `/`, `/app.js`, `/styles.css`, and the JSON API, so no desktop UI package is required.
+- Closing the dashboard window hides it and keeps monitoring running.
+- Choosing Quit from the tray/menu-bar icon exits the desktop app and stops the embedded monitor server with it.
 - Other machines on the same LAN open `http://<agent-machine-ip>:<selected-port>` in a normal browser.
+
+For normal installs, download the desktop release artifact for your OS. On Windows, use `AgentWatch_<version>_x64-setup.exe`; do not install the service-only helper unless you intentionally want a headless deployment without a tray icon.
+
+## Rust Headless Server
+
+The standalone Rust server is still available for development and advanced headless deployments. It is not required when you use the desktop tray app.
 
 Install the JavaScript wrapper dependencies once:
 

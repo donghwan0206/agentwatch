@@ -552,6 +552,7 @@ fn runtime_payload(
         "lanUrls": lan_urls,
         "platform": std::env::consts::OS,
         "runtime": runtime,
+        "monitoringService": monitoring_service_payload(runtime, tray_enabled),
         "name": env!("CARGO_PKG_NAME"),
         "version": env!("CARGO_PKG_VERSION"),
         "trayEnabled": tray_enabled,
@@ -563,6 +564,17 @@ fn runtime_payload(
         "configPath": port_config["configPath"].clone(),
         "hostname": snapshot.hostname,
         "timestamp": snapshot.timestamp,
+    })
+}
+
+fn monitoring_service_payload(runtime: &'static str, tray_enabled: bool) -> serde_json::Value {
+    let embedded = runtime == "tauri-rust";
+    json!({
+        "mode": if embedded { "desktop-embedded" } else { "headless" },
+        "embedded": embedded,
+        "processOwner": if embedded { "desktop-app" } else { "agentwatch-server" },
+        "closeKeepsRunning": embedded && tray_enabled,
+        "quitStopsMonitoring": true,
     })
 }
 
@@ -672,6 +684,11 @@ mod tests {
         assert_eq!(value["lanUrls"][1], "http://10.0.0.4:8766");
         assert_eq!(value["platform"], std::env::consts::OS);
         assert_eq!(value["runtime"], "tauri-rust");
+        assert_eq!(value["monitoringService"]["mode"], "desktop-embedded");
+        assert_eq!(value["monitoringService"]["embedded"], true);
+        assert_eq!(value["monitoringService"]["processOwner"], "desktop-app");
+        assert_eq!(value["monitoringService"]["closeKeepsRunning"], true);
+        assert_eq!(value["monitoringService"]["quitStopsMonitoring"], true);
         assert_eq!(value["name"], "agentwatch");
         assert_eq!(value["version"], env!("CARGO_PKG_VERSION"));
         assert_eq!(value["trayEnabled"], true);
@@ -686,6 +703,14 @@ mod tests {
 
         assert_eq!(value["trayEnabled"], false);
         assert_eq!(value["indicatorTarget"], serde_json::Value::Null);
+        assert_eq!(value["monitoringService"]["mode"], "headless");
+        assert_eq!(value["monitoringService"]["embedded"], false);
+        assert_eq!(
+            value["monitoringService"]["processOwner"],
+            "agentwatch-server"
+        );
+        assert_eq!(value["monitoringService"]["closeKeepsRunning"], false);
+        assert_eq!(value["monitoringService"]["quitStopsMonitoring"], true);
     }
 
     #[test]
