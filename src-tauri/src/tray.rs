@@ -415,6 +415,7 @@ fn smooth_alpha(distance: f32) -> f32 {
     (0.5 - distance).clamp(0.0, 1.0)
 }
 
+#[cfg(target_os = "macos")]
 fn put_pixel(rgba: &mut [u8], x: i32, y: i32, alpha: u8) {
     put_pixel_rgba(rgba, x, y, 0, 0, 0, alpha);
 }

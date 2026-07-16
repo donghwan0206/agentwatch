@@ -192,7 +192,12 @@ jobs:
         run: npm ci
 
       - name: Test
+        if: runner.os != 'Windows'
         run: npm test
+
+      - name: Test Windows contracts
+        if: runner.os == 'Windows'
+        run: npm run test:release-scripts && node scripts/tauri-config.test.mjs && node scripts/release-readiness.test.mjs && node scripts/python-unittest.mjs
 
       - name: Check release helper scripts
         shell: bash

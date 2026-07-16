@@ -50,6 +50,11 @@ assert.match(workflow, /TAURI_SIGNING_PRIVATE_KEY: \$\{\{ secrets\.TAURI_SIGNING
 assert.match(workflow, /npm run smoke:headless/, "headless smoke test missing");
 assert.match(
   workflow,
+  /Test[\s\S]*if: runner\.os != 'Windows'[\s\S]*run: npm test[\s\S]*Test Windows contracts[\s\S]*if: runner\.os == 'Windows'[\s\S]*node scripts\/tauri-config\.test\.mjs/,
+  "Windows package job must avoid running the Tauri lib test binary while keeping contract tests",
+);
+assert.match(
+  workflow,
   /AGENTWATCH_HEADLESS_SMOKE_LAN_PREFLIGHT_REPORT: release-assets-service\/lan-preflight-\$\{\{ matrix\.platform \}\}\.json/,
   "service job LAN preflight report generation missing",
 );
