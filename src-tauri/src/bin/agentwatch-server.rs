@@ -6,6 +6,8 @@ mod config;
 mod monitor;
 #[path = "../server.rs"]
 mod server;
+#[path = "../update.rs"]
+mod update;
 #[path = "../usage.rs"]
 mod usage;
 

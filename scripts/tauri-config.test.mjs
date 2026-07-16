@@ -7,6 +7,10 @@ const plist = readFileSync("src-tauri/Info.plist", "utf8");
 const mainRs = readFileSync("src-tauri/src/main.rs", "utf8");
 const libRs = readFileSync("src-tauri/src/lib.rs", "utf8");
 const trayRs = readFileSync("src-tauri/src/tray.rs", "utf8");
+const updateRs = readFileSync("src-tauri/src/update.rs", "utf8");
+const serverRs = readFileSync("src-tauri/src/server.rs", "utf8");
+const indexHtml = readFileSync("static/index.html", "utf8");
+const appJs = readFileSync("static/app.js", "utf8");
 const bundle = config.bundle || {};
 
 assert.equal(config.productName, "AgentWatch");
@@ -61,7 +65,15 @@ assert.match(libRs, /Err\(error\)[\s\S]*AgentWatch tray setup failed/, "tray set
 assert.match(libRs, /show_window_on_start\(\)/, "startup window display must be gated");
 assert.match(libRs, /AGENTWATCH_SHOW_WINDOW_ON_START/, "startup window override env var missing");
 assert.match(libRs, /tauri_plugin_updater::Builder::new\(\)\.build\(\)/, "Tauri updater plugin must be initialized");
-assert.match(libRs, /download_and_install/, "Tauri updater must install available updates");
+assert.match(updateRs, /download_and_install/, "Tauri updater must install available updates");
+assert.match(updateRs, /check_on_start/, "Tauri updater must check in the background on start");
+assert.doesNotMatch(libRs, /download_and_install/, "startup must not silently install updates without user action");
+assert.match(serverRs, /\/api\/update\/status/, "update status endpoint missing");
+assert.match(serverRs, /\/api\/update\/check/, "update check endpoint missing");
+assert.match(serverRs, /\/api\/update\/install/, "update install endpoint missing");
+assert.match(indexHtml, /온에어 업데이트/, "dashboard update panel missing");
+assert.match(appJs, /\/api\/update\/check/, "dashboard update check action missing");
+assert.match(appJs, /\/api\/update\/install/, "dashboard update install action missing");
 assert.match(
   libRs,
   /if !tray_installed \|\| show_window_on_start\(\)[\s\S]*window\.show\(\)[\s\S]*window\.set_focus\(\)/,
@@ -69,9 +81,13 @@ assert.match(
 );
 assert.match(libRs, /cfg\(target_os = "macos"\)[\s\S]*fn default_show_window_on_start\(\) -> bool[\s\S]*false/, "macOS should keep tray startup hidden by default");
 assert.match(libRs, /cfg\(not\(target_os = "macos"\)\)[\s\S]*fn default_show_window_on_start\(\) -> bool[\s\S]*true/, "Windows and Linux should show the settings/dashboard window on launch");
-for (const id of ["status", "runtime", "agents", "local_url", "lan_url", "open", "quit"]) {
+for (const id of ["status", "runtime", "agents", "local_url", "lan_url", "update_status", "update_check", "update_install", "open", "quit"]) {
   assert.match(trayRs, new RegExp(`"${id}"`), `tray menu item ${id} missing`);
 }
+assert.match(trayRs, /Check for updates/, "tray update check action missing");
+assert.match(trayRs, /Install update/, "tray update install action missing");
+assert.match(trayRs, /update_state\.check\(\)\.await/, "tray update check handler missing");
+assert.match(trayRs, /update_state\.install\(\)\.await/, "tray update install handler missing");
 assert.match(trayRs, /Agents:/, "tray menu must include active agent summary text");
 assert.match(trayRs, /fn agent_summary/, "tray menu must derive active agent summary from monitor providers");
 assert.match(trayRs, /set_tooltip/, "tray tooltip updates missing");

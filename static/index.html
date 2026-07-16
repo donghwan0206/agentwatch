@@ -44,6 +44,22 @@
         <p id="portSetupStatus" class="port-setup-status"></p>
       </section>
 
+      <section class="update-panel panel">
+        <div>
+          <p class="eyebrow">Update</p>
+          <h2>온에어 업데이트</h2>
+          <p id="updateStatusText">업데이트 상태 확인 중</p>
+        </div>
+        <div class="update-progress" aria-hidden="true">
+          <span id="updateProgressBar"></span>
+        </div>
+        <div class="update-actions">
+          <span id="updateVersionText">-</span>
+          <button id="updateCheckBtn" type="button">업데이트 확인</button>
+          <button id="updateInstallBtn" type="button" disabled>설치 및 재시작</button>
+        </div>
+      </section>
+
       <section class="status-grid">
         <article class="status-panel">
           <div class="activity-orb" id="activityOrb" aria-hidden="true">

@@ -35,24 +35,13 @@ assert.match(
   "service-only next-steps report must be generated before final checksums",
 );
 assert.match(workflow, /agentwatch-service-release-\$\{\{ runner\.os \}\}/, "service-only artifact upload missing");
-assert.match(workflow, /package:[\s\S]*if: github\.event_name == 'workflow_dispatch' && inputs\.include_desktop/, "desktop package job must be manual opt-in");
-assert.match(workflow, /release:[\s\S]*name: GitHub Service Release[\s\S]*needs:[\s\S]*- service/, "release job must wait for service job");
-assert.doesNotMatch(workflow, /\n  release:\n[\s\S]*?needs:[\s\S]*?- package[\s\S]*?if: startsWith\(github\.ref, 'refs\/tags\/'\)/, "service release job must not depend on desktop package job");
 assert.match(
   workflow,
-  /Checkout release scripts[\s\S]*Download service release assets/,
-  "release job must checkout before downloading service artifacts",
+  /package:[\s\S]*if: startsWith\(github\.ref, 'refs\/tags\/'\) \|\| \(github\.event_name == 'workflow_dispatch' && inputs\.include_desktop\)/,
+  "desktop package job must run for tags and manual opt-in",
 );
-assert.doesNotMatch(workflow, /Download release assets[\s\S]*pattern: agentwatch-release-\*/, "service release job must not download desktop release assets");
-assert.match(workflow, /pattern: agentwatch-service-release-\*/, "service release artifact download missing");
-assert.match(workflow, /path: service-release-assets/, "service release artifact download path missing");
-assert.match(workflow, /npm run release:bundle-service -- --input service-release-assets --output release-assets/, "service release archive step missing");
-assert.match(workflow, /npm run release:verify-service-archives -- release-assets/, "service release archive verification step missing");
-assert.match(
-  workflow,
-  /shasum -a 256 release-assets\/\*\.tar\.gz > release-assets\/SHA256SUMS\.txt/,
-  "service release archive checksum step missing",
-);
+assert.doesNotMatch(workflow, /name: GitHub Service Release/, "service archives must not be published to GitHub Releases");
+assert.doesNotMatch(workflow, /Download service release assets[\s\S]*gh release/, "GitHub release publishing must not use service assets");
 assert.match(workflow, /macos-latest[\s\S]*platform: macos[\s\S]*npm run build:mac:release/, "optional macOS desktop build missing");
 assert.match(workflow, /windows-latest[\s\S]*platform: windows[\s\S]*npm run build:windows/, "optional Windows desktop package build missing");
 assert.match(workflow, /ubuntu-24\.04[\s\S]*platform: linux[\s\S]*npm run build:linux/, "optional Linux desktop package build missing");
@@ -142,8 +131,8 @@ assert.match(
 assert.match(workflow, /name: agentwatch-desktop-release-archives/, "desktop release archive upload missing");
 assert.match(
   workflow,
-  /desktop-github-release:[\s\S]*name: GitHub Desktop Release[\s\S]*github\.event_name == 'workflow_dispatch' && inputs\.include_desktop && startsWith\(github\.ref, 'refs\/tags\/'\)[\s\S]*needs:[\s\S]*- desktop-release[\s\S]*- release/,
-  "desktop GitHub release job must run for manual tagged desktop releases after service release",
+  /desktop-github-release:[\s\S]*name: GitHub Desktop Release[\s\S]*startsWith\(github\.ref, 'refs\/tags\/'\) && \(github\.event_name != 'workflow_dispatch' \|\| inputs\.include_desktop\)[\s\S]*needs:[\s\S]*- desktop-release/,
+  "desktop GitHub release job must publish tagged desktop releases",
 );
 assert.match(
   workflow,

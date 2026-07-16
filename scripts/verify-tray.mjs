@@ -268,13 +268,27 @@ function verifyHiddenStartupContract() {
 function verifyTraySourceContract() {
   try {
     const trayRs = readFileSync(join(root, "src-tauri", "src", "tray.rs"), "utf8");
-    const requiredMenuIds = ["status", "runtime", "agents", "local_url", "lan_url", "open", "quit"];
+    const requiredMenuIds = [
+      "status",
+      "runtime",
+      "agents",
+      "local_url",
+      "lan_url",
+      "update_status",
+      "update_check",
+      "update_install",
+      "open",
+      "quit",
+    ];
     const requiredMenuLabels = [
       "AgentWatch monitoring",
       "Runtime:",
       "Agents:",
       "Local:",
       "LAN:",
+      "Update:",
+      "Check for updates",
+      "Install update",
       "Open dashboard",
       "Quit",
     ];
@@ -288,6 +302,8 @@ function verifyTraySourceContract() {
       ) &&
       /fn\s+agent_summary[\s\S]*take\(3\)[\s\S]*Agents:/.test(trayRs) &&
       /"open"\s*=>\s*show_main_window/.test(trayRs) &&
+      /"update_check"[\s\S]*update_state\.check\(\)\.await/.test(trayRs) &&
+      /"update_install"[\s\S]*update_state\.install\(\)\.await/.test(trayRs) &&
       /"quit"\s*=>\s*app\.exit\(0\)/.test(trayRs);
 
     const requiredTooltipParts = [

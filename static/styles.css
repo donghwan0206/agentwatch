@@ -236,6 +236,50 @@ h2 {
   margin: 0;
 }
 
+.update-panel {
+  align-items: center;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(180px, 1fr) auto;
+  margin-bottom: 14px;
+  padding: 16px 18px;
+}
+
+.update-panel p {
+  color: var(--soft);
+  line-height: 1.45;
+  margin-top: 4px;
+}
+
+.update-progress {
+  background: #10161d;
+  border-radius: 999px;
+  height: 10px;
+  overflow: hidden;
+}
+
+.update-progress span {
+  background: linear-gradient(90deg, var(--green), var(--blue));
+  display: block;
+  height: 100%;
+  transition: width 0.18s ease;
+  width: 0%;
+}
+
+.update-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.update-actions span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  max-width: 210px;
+  overflow-wrap: anywhere;
+}
+
 .remote-verify-body {
   align-items: center;
   display: flex;

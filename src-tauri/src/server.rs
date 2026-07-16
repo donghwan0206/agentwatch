@@ -1,4 +1,4 @@
-use crate::{activity_log, config, monitor, usage};
+use crate::{activity_log, config, monitor, update, usage};
 use axum::{
     extract::{ConnectInfo, Query, State},
     http::{header, HeaderValue, StatusCode},
@@ -62,6 +62,7 @@ struct MonitorStore {
     data: RwLock<MonitorData>,
     activity_log: Option<activity_log::ActivityLog>,
     shared_snapshot: monitor::SharedSnapshot,
+    update_state: update::SharedUpdateState,
     port: u16,
     tray_enabled: bool,
     runtime: &'static str,
@@ -82,21 +83,28 @@ pub struct ServerHandle {
 pub fn spawn_server(
     shared_snapshot: monitor::SharedSnapshot,
     tray_enabled: bool,
+    update_state: update::SharedUpdateState,
 ) -> std::io::Result<ServerHandle> {
-    spawn_server_with_runtime(shared_snapshot, tray_enabled, "tauri-rust")
+    spawn_server_with_runtime(shared_snapshot, tray_enabled, "tauri-rust", update_state)
 }
 
 #[allow(dead_code)]
 pub fn spawn_headless_server(
     shared_snapshot: monitor::SharedSnapshot,
 ) -> std::io::Result<ServerHandle> {
-    spawn_server_with_runtime(shared_snapshot, false, "rust-headless")
+    spawn_server_with_runtime(
+        shared_snapshot,
+        false,
+        "rust-headless",
+        update::UpdateState::unavailable(),
+    )
 }
 
 fn spawn_server_with_runtime(
     shared_snapshot: monitor::SharedSnapshot,
     tray_enabled: bool,
     runtime_name: &'static str,
+    update_state: update::SharedUpdateState,
 ) -> std::io::Result<ServerHandle> {
     let listener = bind_listener()?;
     let port = listener.local_addr()?.port();
@@ -107,6 +115,7 @@ fn spawn_server_with_runtime(
         runtime.block_on(async move {
             let state = Arc::new(MonitorStore::new(
                 shared_snapshot,
+                update_state,
                 port,
                 tray_enabled,
                 runtime_name,
@@ -120,6 +129,9 @@ fn spawn_server_with_runtime(
                 .route("/api/config", get(config_route))
                 .route("/api/config/port", post(save_port_config_route))
                 .route("/api/config/usage-paths", post(save_usage_paths_route))
+                .route("/api/update/status", get(update_status_route))
+                .route("/api/update/check", post(update_check_route))
+                .route("/api/update/install", post(update_install_route))
                 .route("/api/snapshot", get(snapshot))
                 .route("/api/usage", get(usage_route))
                 .route("/api/usage-locations", get(usage_locations_route))
@@ -231,6 +243,7 @@ fn port_config_payload(effective_port: u16) -> serde_json::Value {
 impl MonitorStore {
     fn new(
         shared_snapshot: monitor::SharedSnapshot,
+        update_state: update::SharedUpdateState,
         port: u16,
         tray_enabled: bool,
         runtime: &'static str,
@@ -257,6 +270,7 @@ impl MonitorStore {
             }),
             activity_log,
             shared_snapshot,
+            update_state,
             port,
             tray_enabled,
             runtime,
@@ -452,6 +466,20 @@ async fn save_usage_paths_route(
             Json(json!({ "error": error.to_string() })),
         ),
     }
+}
+
+async fn update_status_route(State(state): State<Arc<MonitorStore>>) -> Json<update::UpdateStatus> {
+    Json(state.update_state.status())
+}
+
+async fn update_check_route(State(state): State<Arc<MonitorStore>>) -> Json<update::UpdateStatus> {
+    Json(state.update_state.check().await)
+}
+
+async fn update_install_route(
+    State(state): State<Arc<MonitorStore>>,
+) -> Json<update::UpdateStatus> {
+    Json(state.update_state.install().await)
 }
 
 async fn snapshot(State(state): State<Arc<MonitorStore>>) -> Json<monitor::Snapshot> {

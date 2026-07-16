@@ -156,9 +156,9 @@ Run lifecycle verification before the final `verify:service` pass. The service v
 
 ## Desktop Tray App Scope
 
-The normal end-user release is the desktop tray app. On Windows, `AgentWatch_<version>_x64-setup.exe` installs the app that stays in the notification area, keeps the embedded Rust monitor server running after the launcher/terminal is gone, and opens the browser dashboard from the tray menu. The service-only archives remain available for headless/server-style deployments, but they intentionally do not include a tray icon.
+The normal end-user release is the desktop tray app. On Windows, `AgentWatch_<version>_x64-setup.exe` installs the app that stays in the notification area, keeps the embedded Rust monitor server running after the launcher/terminal is gone, and opens the browser dashboard from the tray menu. Service-only archives remain local/advanced artifacts for headless deployments and are not published to GitHub Releases by default.
 
-To build the tray app locally, run `npm run package:desktop-local -- --assets release-assets` or run the GitHub workflow with `include_desktop: true`. That path builds native packages on each OS, verifies the packaged app smoke path, writes tray verification helpers, and uploads per-platform `agentwatch-release-<OS>` artifacts. The follow-up `desktop-release` job bundles those artifacts into:
+To build the tray app locally, run `npm run package:desktop-local -- --assets release-assets`. Tagged GitHub workflow runs build native packages on each OS by default, verify the packaged app smoke path, write tray verification helpers, and upload per-platform `agentwatch-release-<OS>` artifacts. The follow-up `desktop-release` job bundles those artifacts into:
 
 - `agentwatch-desktop-release-macOS.tar.gz`
 - `agentwatch-desktop-release-Windows.tar.gz`
@@ -184,7 +184,7 @@ npm run release:next-steps -- --assets release-assets --archives desktop-archive
 
 The generated checklist reads `release-status.json`, `desktop-release-status.json`, `remote-verification.md`, and LAN preflight evidence to print the exact remote-browser URL, tray/manual report commands, refresh commands, and missing Windows/Linux desktop archive build commands.
 
-When the manual workflow is run from a `v*` tag with `include_desktop: true`, the `desktop-github-release` job waits for the service release job, verifies the desktop archives again with `--require-final`, runs `release:desktop-status --check`, checks `desktop-archives/SHA256SUMS.txt`, and uploads `agentwatch-desktop-release-<OS>.tar.gz` plus the checksum and `desktop-release-status.json/.md` files to the same GitHub Release. The checksum file covers both the desktop tarballs and the desktop status reports.
+On `v*` tag builds, the `desktop-github-release` job verifies the desktop archives, runs `release:desktop-status`, checks `desktop-archives/SHA256SUMS.txt`, writes `latest.json` for Tauri updater clients, and uploads the desktop installers/archives plus desktop status files to the GitHub Release. The checksum file covers both the desktop tarballs and the desktop status reports.
 
 Linux desktop CI runs packaged app smoke tests under Xvfb with tray disabled, then runs `verify-tray-config.mjs` separately inside `dbus-run-session -- xvfb-run` with tray enabled. That split keeps the smoke path stable while still collecting automated `linux-tray` runtime/config evidence for desktop release readiness.
 
@@ -275,28 +275,15 @@ Set `AGENTWATCH_DB` to force a different SQLite path.
 - `windows-latest` with `npm run build:server`
 - `ubuntu-24.04` with `npm run build:server`
 
-Each service job runs `smoke:headless`, dry-runs the platform service installer against the built server binary, writes `bench:report:service`, collects `release-assets-service` with `--service-only`, finalizes the service/browser verifier helpers, writes the manifest and status reports, refreshes checksums, checks `release:readiness --service-only --automated-only --platform <platform>`, and uploads `agentwatch-service-release-<OS>` artifacts. This is the CI path that matches the default LAN browser deployment.
+Each service job runs `smoke:headless`, dry-runs the platform service installer against the built server binary, writes `bench:report:service`, collects `release-assets-service` with `--service-only`, finalizes the service/browser verifier helpers, writes the manifest and status reports, refreshes checksums, checks `release:readiness --service-only --automated-only --platform <platform>`, and uploads `agentwatch-service-release-<OS>` as an internal workflow artifact. Those service artifacts are not published to GitHub Releases by default.
 
-On `v*` tag builds, CI publishes the default service-only bundles to the matching GitHub Release:
+On `v*` tag builds, CI publishes the desktop tray app artifacts to the matching GitHub Release:
 
-- `agentwatch-service-release-macOS.tar.gz`, `agentwatch-service-release-Windows.tar.gz`, and `agentwatch-service-release-Linux.tar.gz` service-only bundles
-- `agentwatch-server-<platform>` headless Rust monitor binary inside each service-only bundle
-- `install-service-macos.sh`, `uninstall-service-macos.sh`, `install-service-linux.sh`, `uninstall-service-linux.sh`, `install-service-windows.ps1`, and `uninstall-service-windows.ps1`
-- `agentwatch-service-status.mjs`
-- `agentwatch-lan-preflight.mjs`
-- `agentwatch-verify-remote-client.mjs`
-- `agentwatch-import-remote-report.mjs`
-- `verify-remote-macos.sh`, `verify-remote-linux.sh`, `verify-remote-windows.cmd`, and `verify-remote-windows.ps1`
-- `performance-comparison-<platform>.json` and `.md` machine-local benchmark evidence
-- `agentwatch-release-manifest-<platform>.json`
-- `agentwatch-release-audit.mjs`, `agentwatch-release-status.mjs`, and `agentwatch-release-next-steps.mjs` for summarizing remaining release blockers from a downloaded release folder
-- `agentwatch-release-readiness.mjs` and `agentwatch-refresh-release-evidence.mjs` for regenerating audit, status, next steps, checksums, and readiness after importing remote or tray evidence
-- `service-quickstart.md` with install, status, browser UI, remote evidence, and uninstall steps for service-only releases
-- `release-summary.md` summarizing package, performance, service, and remote browser status
-- `remote-verification.md` with copy-ready commands for running the LAN browser verifier from another machine
-- `completion-audit.json` and `.md` mapping the Rust service, LAN browser, and token/quota dashboard requirements to collected evidence
-- `SHA256SUMS.txt` covering every release asset
-- `release-verification.md` describing automated and manual gates
+- `AgentWatch_<version>_x64-setup.exe` and updater signature for Windows
+- macOS `.app` archive and desktop release archive
+- Linux AppImage/deb/rpm packages and desktop release archive
+- `latest.json` for Tauri updater clients
+- desktop release status and checksum files
 
 For full service release readiness on one platform, run:
 
@@ -310,4 +297,4 @@ CI also runs `bench:report:service` for service-only jobs. The resulting `perfor
 
 `npm test` includes a workflow contract test for `.github/workflows/package.yml`. It fails if the CI service matrix stops building macOS, Windows, or Linux service assets, drops the service-only benchmark/readiness gate, drops the headless server build, stops collecting manifests after finalization, or removes the automated release-readiness gate.
 
-For manual desktop package runs, the workflow contract also checks that `include_desktop: true` builds macOS, Windows, and Linux packages, writes release status/checksums before readiness, uploads per-platform desktop release assets, bundles those artifacts into desktop tarballs, verifies those tarballs, uploads `agentwatch-desktop-release-archives`, and publishes those archives to a tagged GitHub Release when the workflow is run on a tag.
+For desktop package runs, the workflow contract also checks that tag builds and manual `include_desktop: true` runs build macOS, Windows, and Linux packages, write release status/checksums before readiness, upload per-platform desktop release assets, bundle those artifacts into desktop tarballs, verify those tarballs, upload `agentwatch-desktop-release-archives`, and publish those archives to a tagged GitHub Release.

@@ -3,6 +3,7 @@ mod config;
 mod monitor;
 mod server;
 mod tray;
+mod update;
 mod usage;
 
 use tauri::Manager;
@@ -20,17 +21,25 @@ pub fn run() {
             {
                 app.handle()
                     .plugin(tauri_plugin_updater::Builder::new().build())?;
-                install_available_update(app.handle().clone());
             }
             let app_handle = app.handle().clone();
             configure_platform_app_presence(&app_handle);
             let shared_snapshot = monitor::SharedSnapshot::default();
+            let update_state = update::UpdateState::desktop(app_handle.clone());
+            update::UpdateState::check_on_start(update_state.clone());
             let tray_enabled = !no_tray_mode();
-            let server = server::spawn_server(shared_snapshot.clone(), tray_enabled)
-                .expect("start AgentWatch server");
+            let server =
+                server::spawn_server(shared_snapshot.clone(), tray_enabled, update_state.clone())
+                    .expect("start AgentWatch server");
             let dashboard_url = format!("http://127.0.0.1:{}", server.port);
             let tray_installed = if tray_enabled {
-                match tray::install(&app_handle, &dashboard_url, server.port, shared_snapshot) {
+                match tray::install(
+                    &app_handle,
+                    &dashboard_url,
+                    server.port,
+                    shared_snapshot,
+                    update_state,
+                ) {
                     Ok(()) => true,
                     Err(error) => {
                         eprintln!("AgentWatch tray setup failed: {error}");
@@ -94,24 +103,4 @@ fn default_show_window_on_start() -> bool {
 #[cfg(not(target_os = "macos"))]
 fn default_show_window_on_start() -> bool {
     true
-}
-
-#[cfg(desktop)]
-fn install_available_update(app: tauri::AppHandle) {
-    tauri::async_runtime::spawn(async move {
-        if let Err(error) = check_and_install_update(app).await {
-            eprintln!("AgentWatch updater check failed: {error}");
-        }
-    });
-}
-
-#[cfg(desktop)]
-async fn check_and_install_update(app: tauri::AppHandle) -> tauri_plugin_updater::Result<()> {
-    use tauri_plugin_updater::UpdaterExt;
-
-    if let Some(update) = app.updater()?.check().await? {
-        update.download_and_install(|_, _| {}, || {}).await?;
-        app.restart();
-    }
-    Ok(())
 }

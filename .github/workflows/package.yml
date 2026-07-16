@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       include_desktop:
-        description: "Also build optional desktop app packages"
+        description: "Build desktop app packages on manual runs"
         required: false
         default: false
         type: boolean
@@ -130,7 +130,7 @@ jobs:
 
   package:
     name: ${{ matrix.name }}
-    if: github.event_name == 'workflow_dispatch' && inputs.include_desktop
+    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.include_desktop)
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -355,7 +355,7 @@ jobs:
 
   desktop-release:
     name: Desktop Release Archives
-    if: github.event_name == 'workflow_dispatch' && inputs.include_desktop
+    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.include_desktop)
     needs:
       - package
     runs-on: ubuntu-24.04
@@ -396,10 +396,9 @@ jobs:
 
   desktop-github-release:
     name: GitHub Desktop Release
-    if: github.event_name == 'workflow_dispatch' && inputs.include_desktop && startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') && (github.event_name != 'workflow_dispatch' || inputs.include_desktop)
     needs:
       - desktop-release
-      - release
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout release scripts
@@ -442,51 +441,6 @@ jobs:
             --version "${version}" \
             --output desktop-updater-assets/latest.json
           mapfile -t files < <(find desktop-archives desktop-updater-assets -maxdepth 1 -type f | sort)
-          test "${#files[@]}" -gt 0
-
-          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" "${files[@]}" --clobber
-          else
-            gh release create "${GITHUB_REF_NAME}" "${files[@]}" \
-              --title "${GITHUB_REF_NAME}" \
-              --generate-notes \
-              --verify-tag
-          fi
-
-  release:
-    name: GitHub Service Release
-    needs:
-      - service
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout release scripts
-        uses: actions/checkout@v4
-
-      - name: Download service release assets
-        uses: actions/download-artifact@v4
-        with:
-          pattern: agentwatch-service-release-*
-          path: service-release-assets
-          merge-multiple: false
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Publish release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          rm -rf release-assets
-          mkdir -p release-assets
-          npm run release:bundle-service -- --input service-release-assets --output release-assets
-          npm run release:verify-service-archives -- release-assets
-          shasum -a 256 release-assets/*.tar.gz > release-assets/SHA256SUMS.txt
-          mapfile -t files < <(find release-assets -maxdepth 1 -type f | sort)
           test "${#files[@]}" -gt 0
 
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then

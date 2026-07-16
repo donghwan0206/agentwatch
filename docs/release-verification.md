@@ -53,7 +53,7 @@ npm run release:readiness -- release-assets --service-only --automated-only --pl
 
 `package:local` is the browser-dashboard release path. It builds and collects only the Rust monitor server, writes headless smoke plus LAN preflight evidence, writes Rust-vs-Python performance evidence, finalizes service/browser verification helpers, writes the release manifest after finalization, and does not require a desktop UI package. `package:service-local` is a compatibility alias for the same service-only flow. Use `--platform windows` or `--platform linux` in the readiness command on those platforms, or omit `--platform` only when the release folder contains every platform.
 
-CI creates service-only release tarballs with:
+For explicit headless/service packaging, CI or a local maintainer can create service-only tarballs with:
 
 ```bash
 npm run release:bundle-service -- --input service-release-assets --output release-assets
@@ -61,7 +61,7 @@ npm run release:bundle-service -- --input service-release-assets --output releas
 
 The bundler fails incomplete service artifact folders. Each folder must include a headless Rust server binary, `SHA256SUMS.txt`, `release-status.json`, `release-status.md`, `remote-verification.md`, completion audit files, install/uninstall helpers, and the service/remote verifier scripts needed to validate the browser UI from another LAN machine.
 
-If a native wrapper is explicitly requested later, `npm run package:desktop-local -- --assets release-assets` or the manual workflow with `include_desktop: true` produces per-platform desktop release artifacts. After the macOS, Windows, and Linux package jobs upload `agentwatch-release-<OS>` folders, CI bundles and verifies desktop archives with:
+The normal tagged release path produces per-platform desktop release artifacts. `npm run package:desktop-local -- --assets release-assets` provides the same path locally, and manual workflow runs can still use `include_desktop: true`. After the macOS, Windows, and Linux package jobs upload `agentwatch-release-<OS>` folders, CI bundles and verifies desktop archives with:
 
 ```bash
 npm run release:bundle-desktop -- --input desktop-release-assets --output desktop-archives

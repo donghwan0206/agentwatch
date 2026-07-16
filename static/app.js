@@ -8,6 +8,7 @@ const state = {
   usage: [],
   usageLocations: [],
   config: null,
+  updateStatus: null,
   quotaRefreshStatus: "idle",
   portSaveStatus: "idle",
   usagePathSaveStatus: {},
@@ -33,9 +34,10 @@ async function fetchJson(url) {
 }
 
 async function refresh() {
-  const [runtime, config, snapshot, history, providerHistory, remoteCheck, events, usage, usageLocations] = await Promise.all([
+  const [runtime, config, updateStatus, snapshot, history, providerHistory, remoteCheck, events, usage, usageLocations] = await Promise.all([
     fetchJson("/api/runtime"),
     fetchJson("/api/config"),
+    fetchJson("/api/update/status"),
     fetchJson("/api/snapshot"),
     fetchJson("/api/history?minutes=180"),
     fetchJson("/api/provider-history?minutes=180"),
@@ -46,6 +48,7 @@ async function refresh() {
   ]);
   state.runtime = runtime;
   state.config = config;
+  state.updateStatus = updateStatus;
   state.snapshot = snapshot;
   state.history = history.history || [];
   state.providerHistory = providerHistory.providerHistory || [];
@@ -65,6 +68,7 @@ async function refresh() {
 function render() {
   renderHeader();
   renderPortSetup();
+  renderUpdatePanel();
   renderRemoteVerify();
   renderSummary();
   renderProviders();
@@ -74,6 +78,51 @@ function render() {
   renderHeatmap();
   renderProviderHistory();
   renderEvents();
+}
+
+function renderUpdatePanel() {
+  const status = state.updateStatus || {};
+  const phase = status.phase || "idle";
+  const busy = ["checking", "downloading", "installing", "restarting"].includes(phase);
+  $("updateStatusText").textContent = updateStatusCopy(status);
+  $("updateVersionText").textContent = updateVersionCopy(status);
+  $("updateCheckBtn").textContent = phase === "checking" ? "확인 중" : "업데이트 확인";
+  $("updateCheckBtn").disabled = busy;
+  $("updateInstallBtn").disabled = !status.updateAvailable || busy;
+  $("updateInstallBtn").textContent = phase === "downloading" || phase === "installing"
+    ? "설치 중"
+    : "설치 및 재시작";
+  const progress = updateProgressPercent(status);
+  $("updateProgressBar").style.width = `${progress}%`;
+}
+
+function updateStatusCopy(status) {
+  const checked = status.checkedAt ? ` · ${formatDateTime(status.checkedAt)}` : "";
+  const message = status.message || "업데이트 확인 대기";
+  if (status.phase === "available") {
+    return `${message}${checked}`;
+  }
+  if (status.phase === "up-to-date") {
+    return `최신 버전입니다${checked}`;
+  }
+  return `${message}${checked}`;
+}
+
+function updateVersionCopy(status) {
+  const current = status.currentVersion ? `현재 v${status.currentVersion}` : "현재 버전 확인 중";
+  if (status.availableVersion) {
+    return `${current} → v${status.availableVersion}`;
+  }
+  return current;
+}
+
+function updateProgressPercent(status) {
+  if (Number.isFinite(status.percent)) return clamp(Number(status.percent), 0, 100);
+  if (status.phase === "available") return 100;
+  if (status.phase === "up-to-date") return 100;
+  if (status.phase === "checking") return 30;
+  if (status.phase === "installing" || status.phase === "restarting") return 100;
+  return 0;
 }
 
 function renderRemoteVerify() {
@@ -1175,6 +1224,35 @@ async function refreshUsageOnly() {
   }
 }
 
+async function checkForUpdate() {
+  state.updateStatus = { ...(state.updateStatus || {}), phase: "checking", message: "업데이트 확인 중" };
+  renderUpdatePanel();
+  const response = await fetch("/api/update/check", { method: "POST" });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.message || `${response.status} ${response.statusText}`);
+  }
+  state.updateStatus = payload;
+  renderUpdatePanel();
+}
+
+async function installUpdate() {
+  state.updateStatus = {
+    ...(state.updateStatus || {}),
+    phase: "downloading",
+    message: "업데이트 다운로드 준비 중",
+    percent: 0,
+  };
+  renderUpdatePanel();
+  const response = await fetch("/api/update/install", { method: "POST" });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.message || `${response.status} ${response.statusText}`);
+  }
+  state.updateStatus = payload;
+  renderUpdatePanel();
+}
+
 async function copyText(value) {
   if (navigator.clipboard?.writeText) {
     try {
@@ -1247,6 +1325,12 @@ $("copyLanUrlBtn").addEventListener("click", () => {
 });
 $("portSaveBtn").addEventListener("click", () => {
   savePortConfig().catch(showError);
+});
+$("updateCheckBtn").addEventListener("click", () => {
+  checkForUpdate().catch(showError);
+});
+$("updateInstallBtn").addEventListener("click", () => {
+  installUpdate().catch(showError);
 });
 $("portInput").addEventListener("keydown", (event) => {
   if (event.key === "Enter") {

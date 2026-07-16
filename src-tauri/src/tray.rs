@@ -1,4 +1,4 @@
-use crate::monitor;
+use crate::{monitor, update};
 use std::{thread, time::Duration};
 use tauri::{
     image::Image,
@@ -16,6 +16,7 @@ pub fn install(
     dashboard_url: &str,
     port: u16,
     shared_snapshot: monitor::SharedSnapshot,
+    update_state: update::SharedUpdateState,
 ) -> tauri::Result<()> {
     let status = MenuItem::with_id(
         app,
@@ -46,12 +47,32 @@ pub fn install(
         None::<&str>,
     )?;
     let agents = MenuItem::with_id(app, "agents", "Agents: detecting", false, None::<&str>)?;
+    let update_status = MenuItem::with_id(
+        app,
+        "update_status",
+        "Update: checking",
+        false,
+        None::<&str>,
+    )?;
+    let update_check =
+        MenuItem::with_id(app, "update_check", "Check for updates", true, None::<&str>)?;
+    let update_install =
+        MenuItem::with_id(app, "update_install", "Install update", false, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", "Open dashboard", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
         &[
-            &status, &runtime, &agents, &local_url, &lan_url, &open, &quit,
+            &status,
+            &runtime,
+            &agents,
+            &local_url,
+            &lan_url,
+            &update_status,
+            &update_check,
+            &update_install,
+            &open,
+            &quit,
         ],
     )?;
 
@@ -60,10 +81,25 @@ pub fn install(
         .tooltip(format!("AgentWatch monitoring on · Local {dashboard_url}"))
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| match event.id.as_ref() {
-            "open" => show_main_window(app),
-            "quit" => app.exit(0),
-            _ => {}
+        .on_menu_event({
+            let update_state = update_state.clone();
+            move |app, event| match event.id.as_ref() {
+                "open" => show_main_window(app),
+                "update_check" => {
+                    let update_state = update_state.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let _ = update_state.check().await;
+                    });
+                }
+                "update_install" => {
+                    let update_state = update_state.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let _ = update_state.install().await;
+                    });
+                }
+                "quit" => app.exit(0),
+                _ => {}
+            }
         })
         .on_tray_icon_event(|tray, event| {
             if matches!(
@@ -88,11 +124,15 @@ pub fn install(
         status,
         runtime,
         agents,
+        update_status,
+        update_check,
+        update_install,
         local_url,
         lan_url,
         dashboard_url.to_string(),
         port,
         shared_snapshot,
+        update_state,
     );
 
     Ok(())
@@ -103,23 +143,65 @@ fn start_status_loop(
     status_item: MenuItem<tauri::Wry>,
     runtime_item: MenuItem<tauri::Wry>,
     agents_item: MenuItem<tauri::Wry>,
+    update_status_item: MenuItem<tauri::Wry>,
+    update_check_item: MenuItem<tauri::Wry>,
+    update_install_item: MenuItem<tauri::Wry>,
     local_url_item: MenuItem<tauri::Wry>,
     lan_url_item: MenuItem<tauri::Wry>,
     dashboard_url: String,
     port: u16,
     shared_snapshot: monitor::SharedSnapshot,
+    update_state: update::SharedUpdateState,
 ) {
     thread::spawn(move || loop {
         let summary = tray_summary(&dashboard_url, port, &shared_snapshot);
+        let update_summary = update_menu_summary(&update_state.status());
         let _ = status_item.set_text(&summary.menu_text);
         let _ = runtime_item.set_text(&summary.runtime_text);
         let _ = agents_item.set_text(&summary.agents_text);
+        let _ = update_status_item.set_text(&update_summary.status_text);
+        let _ = update_check_item.set_enabled(update_summary.check_enabled);
+        let _ = update_install_item.set_enabled(update_summary.install_enabled);
         let _ = local_url_item.set_text(&summary.local_text);
         let _ = lan_url_item.set_text(&summary.lan_text);
         let _ = tray.set_tooltip(Some(summary.tooltip));
         let _ = tray.set_title(Some(summary.title));
         thread::sleep(Duration::from_secs(10));
     });
+}
+
+struct UpdateMenuSummary {
+    status_text: String,
+    check_enabled: bool,
+    install_enabled: bool,
+}
+
+fn update_menu_summary(status: &update::UpdateStatus) -> UpdateMenuSummary {
+    let busy = matches!(
+        status.phase.as_str(),
+        "checking" | "downloading" | "installing" | "restarting"
+    );
+    let status_text = match status.phase.as_str() {
+        "available" => format!(
+            "Update: v{} available",
+            status.available_version.as_deref().unwrap_or("unknown")
+        ),
+        "up-to-date" => "Update: latest version".to_string(),
+        "checking" => "Update: checking".to_string(),
+        "downloading" => status
+            .percent
+            .map(|percent| format!("Update: downloading {percent:.0}%"))
+            .unwrap_or_else(|| "Update: downloading".to_string()),
+        "installing" => "Update: installing".to_string(),
+        "restarting" => "Update: restarting".to_string(),
+        "error" => "Update: check failed".to_string(),
+        _ => "Update: not checked".to_string(),
+    };
+    UpdateMenuSummary {
+        status_text,
+        check_enabled: !busy,
+        install_enabled: status.update_available && !busy,
+    }
 }
 
 struct TraySummary {

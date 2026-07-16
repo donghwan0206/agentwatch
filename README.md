@@ -87,9 +87,8 @@ npm run release:status -- release-assets --service-only --platform macos
 
 `package:local` packages the Rust monitor server and service/browser verification helpers only. It does not include the desktop tray app. For normal end-user installs, use the desktop release artifacts instead: on Windows, install `AgentWatch_<version>_x64-setup.exe` so AgentWatch stays in the notification area and opens the browser dashboard from the tray menu.
 The local packaging command also runs the headless smoke test, writes `lan-preflight-<platform>.json`, and includes `release-status.json` plus `release-status.md`, so automated readiness can prove the LAN browser endpoint is reachable before manual remote-client evidence exists.
-The archive command writes `agentwatch-service-release-<OS>.tar.gz` for copying to the agent machine.
-Inside a downloaded release folder, the equivalent status command is `node agentwatch-release-status.mjs . --service-only --platform macos`.
-CI publishes the same service-only contents as `agentwatch-service-release-<OS>.tar.gz`; locally, `npm run release:bundle-service -- --input service-release-assets --output release-assets` creates those archives from downloaded service artifacts. Tagged GitHub releases upload these service archives by default, after `npm run release:verify-service-archives -- release-assets` proves that all three OS archives are present and contain no desktop/tray package files. The bundler refuses incomplete service folders that lack install/uninstall helpers, status reports, the remote verification guide, or verifier scripts. After real remote-browser reports are added and release status is ready, add `--require-final` to reject archives that still have service, remote, lifecycle, or audit blockers.
+The archive command writes `agentwatch-service-release-<OS>.tar.gz` for copying to the agent machine when a headless deployment is explicitly needed. Service-only archives are local/advanced artifacts and are not uploaded to the public GitHub Release by default; tagged releases publish the desktop tray apps.
+Inside a service-only release folder, the equivalent status command is `node agentwatch-release-status.mjs . --service-only --platform macos`.
 
 ## Run as a Service
 
@@ -194,7 +193,7 @@ Use `--platform windows` or `--platform linux` on those systems, or omit `--plat
 
 ## Packaging Scope
 
-The supported end-user deployment path is the desktop tray app plus the browser dashboard it serves over LAN. The service-only archive remains available for headless deployments and intentionally has no tray icon. Use `npm run package:desktop-local -- ...` or the tagged GitHub workflow with `include_desktop: true` to produce tray-app installers.
+The supported end-user deployment path is the desktop tray app plus the browser dashboard it serves over LAN. The service-only archive remains available for headless deployments and intentionally has no tray icon. Tagged GitHub releases produce the tray-app installers by default; use `npm run package:desktop-local -- ...` for local desktop packaging.
 
 See [docs/packaging.md](docs/packaging.md) for desktop and service package paths and release checks.
 
