@@ -79,7 +79,7 @@ assert.match(trayRs, /set_title/, "tray title/status updates missing");
 assert.match(trayRs, /fn agent_monitor_icon/, "dedicated tray icon helper missing");
 assert.match(trayRs, /Image::new_owned/, "tray icon must use a generated template bitmap");
 assert.match(trayRs, /cfg\(target_os = "macos"\)[\s\S]*\.icon_as_template\(true\)/, "tray icon must adapt to macOS light and dark modes");
-assert.match(trayRs, /cfg\(not\(target_os = "macos"\)\)[\s\S]*Image::from_bytes\(include_bytes!\("\.\.\/icons\/32x32\.png"\)\)/, "Windows and Linux tray icons must use the visible color app icon");
+assert.match(trayRs, /cfg\(not\(target_os = "macos"\)\)[\s\S]*put_pixel_rgba[\s\S]*red[\s\S]*green[\s\S]*blue/, "Windows and Linux tray icons must use a visible color icon");
 assert.match(trayRs, /show_main_window/, "tray open action missing");
 
 console.log("tauri config tests ok");

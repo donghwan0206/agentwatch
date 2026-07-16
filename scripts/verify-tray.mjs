@@ -304,7 +304,7 @@ function verifyTraySourceContract() {
       /fn\s+agent_monitor_icon/.test(trayRs) &&
       /Image::new_owned/.test(trayRs) &&
       /cfg\(target_os = "macos"\)[\s\S]*\.icon_as_template\(true\)/.test(trayRs) &&
-      /cfg\(not\(target_os = "macos"\)\)[\s\S]*Image::from_bytes\(include_bytes!\("\.\.\/icons\/32x32\.png"\)\)/.test(trayRs) &&
+      /cfg\(not\(target_os = "macos"\)\)[\s\S]*put_pixel_rgba[\s\S]*red[\s\S]*green[\s\S]*blue/.test(trayRs) &&
       /tooltip:\s*format!\([\s\S]*AgentWatch monitoring[\s\S]*processes[\s\S]*CPU[\s\S]*Local[\s\S]*tooltip_lan/.test(
         trayRs,
       );

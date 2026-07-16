@@ -55,7 +55,7 @@ pub fn install(
         ],
     )?;
 
-    let mut tray_builder = TrayIconBuilder::with_id(TRAY_ID)
+    let tray_builder = TrayIconBuilder::with_id(TRAY_ID)
         .icon(agent_monitor_icon()?)
         .tooltip(format!("AgentWatch monitoring on · Local {dashboard_url}"))
         .menu(&menu)
@@ -79,9 +79,7 @@ pub fn install(
         });
 
     #[cfg(target_os = "macos")]
-    {
-        tray_builder = tray_builder.icon_as_template(true);
-    }
+    let tray_builder = tray_builder.icon_as_template(true);
 
     let tray = tray_builder.build(app)?;
 
@@ -230,7 +228,45 @@ fn agent_monitor_icon() -> tauri::Result<Image<'static>> {
 
 #[cfg(not(target_os = "macos"))]
 fn agent_monitor_icon() -> tauri::Result<Image<'static>> {
-    Image::from_bytes(include_bytes!("../icons/32x32.png"))
+    let mut rgba = vec![0; (TRAY_ICON_SIZE * TRAY_ICON_SIZE * 4) as usize];
+    let scale = TRAY_ICON_SIZE as f32 / TRAY_ICON_COORD_SIZE;
+    for y in 0..TRAY_ICON_SIZE {
+        for x in 0..TRAY_ICON_SIZE {
+            let px = (x as f32 + 0.5) / scale;
+            let py = (y as f32 + 0.5) / scale;
+            let body = rounded_rect_mask(px, py, 15.0, 20.0, 34.0, 31.0, 5.5)
+                .max(rounded_rect_mask(px, py, 30.0, 11.0, 5.0, 13.0, 2.5))
+                .max(rounded_rect_mask(px, py, 9.0, 29.0, 5.0, 14.0, 1.8))
+                .max(rounded_rect_mask(px, py, 50.0, 29.0, 5.0, 14.0, 1.8));
+            let graph = sine_graph_mask(px, py) * body;
+            if graph > 0.0 {
+                put_pixel_rgba(
+                    &mut rgba,
+                    x as i32,
+                    y as i32,
+                    255,
+                    255,
+                    255,
+                    (graph * 255.0).round() as u8,
+                );
+            } else {
+                let mix = (px / TRAY_ICON_COORD_SIZE).clamp(0.0, 1.0);
+                let red = (28.0 * (1.0 - mix) + 76.0 * mix).round() as u8;
+                let green = (205.0 * (1.0 - mix) + 151.0 * mix).round() as u8;
+                let blue = (185.0 * (1.0 - mix) + 238.0 * mix).round() as u8;
+                put_pixel_rgba(
+                    &mut rgba,
+                    x as i32,
+                    y as i32,
+                    red,
+                    green,
+                    blue,
+                    (body * 255.0).round() as u8,
+                );
+            }
+        }
+    }
+    Ok(Image::new_owned(rgba, TRAY_ICON_SIZE, TRAY_ICON_SIZE))
 }
 
 fn rounded_rect_mask(
@@ -298,13 +334,17 @@ fn smooth_alpha(distance: f32) -> f32 {
 }
 
 fn put_pixel(rgba: &mut [u8], x: i32, y: i32, alpha: u8) {
+    put_pixel_rgba(rgba, x, y, 0, 0, 0, alpha);
+}
+
+fn put_pixel_rgba(rgba: &mut [u8], x: i32, y: i32, red: u8, green: u8, blue: u8, alpha: u8) {
     if x < 0 || y < 0 || x >= TRAY_ICON_SIZE as i32 || y >= TRAY_ICON_SIZE as i32 {
         return;
     }
     let offset = ((y as u32 * TRAY_ICON_SIZE + x as u32) * 4) as usize;
-    rgba[offset] = 0;
-    rgba[offset + 1] = 0;
-    rgba[offset + 2] = 0;
+    rgba[offset] = red;
+    rgba[offset + 1] = green;
+    rgba[offset + 2] = blue;
     rgba[offset + 3] = alpha;
 }
 
