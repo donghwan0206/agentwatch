@@ -180,7 +180,8 @@ function validateUsageContracts(dashboardHtml, appJs, stylesCss, payload) {
   assert(stylesCss.includes(".token-stats"), "dashboard CSS missing token stat styles");
   assert(stylesCss.includes(".thread-row"), "dashboard CSS missing thread row styles");
   assert(stylesCss.includes(".provider-history-row"), "dashboard CSS missing provider history row styles");
-  assert(stylesCss.includes(".remote-verify-panel"), "dashboard CSS missing remote verification styles");
+  assert(stylesCss.includes(".top-menu"), "dashboard CSS missing compact header menu styles");
+  assert(stylesCss.includes(".remote-verify-facts"), "dashboard CSS missing remote verification styles");
   assert(stylesCss.includes(".copy-url-btn"), "dashboard CSS missing LAN URL copy styles");
 
   const usage = Array.isArray(payload?.usage) ? payload.usage : null;
