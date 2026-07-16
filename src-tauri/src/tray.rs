@@ -83,8 +83,9 @@ pub fn install(
         .show_menu_on_left_click(false)
         .on_menu_event({
             let update_state = update_state.clone();
+            let open_snapshot = shared_snapshot.clone();
             move |app, event| match event.id.as_ref() {
-                "open" => show_main_window(app),
+                "open" => show_main_window(app, &preferred_dashboard_url(port, &open_snapshot)),
                 "update_check" => {
                     let update_state = update_state.clone();
                     tauri::async_runtime::spawn(async move {
@@ -101,16 +102,22 @@ pub fn install(
                 _ => {}
             }
         })
-        .on_tray_icon_event(|tray, event| {
-            if matches!(
-                event,
-                TrayIconEvent::Click {
-                    button: MouseButton::Left,
-                    button_state: MouseButtonState::Up,
-                    ..
+        .on_tray_icon_event({
+            let click_snapshot = shared_snapshot.clone();
+            move |tray, event| {
+                if matches!(
+                    event,
+                    TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    }
+                ) {
+                    show_main_window(
+                        tray.app_handle(),
+                        &preferred_dashboard_url(port, &click_snapshot),
+                    );
                 }
-            ) {
-                show_main_window(tray.app_handle());
             }
         });
 
@@ -431,8 +438,26 @@ fn put_pixel_rgba(rgba: &mut [u8], x: i32, y: i32, red: u8, green: u8, blue: u8,
     rgba[offset + 3] = alpha;
 }
 
-fn show_main_window(app: &AppHandle) {
+fn preferred_dashboard_url(port: u16, shared_snapshot: &monitor::SharedSnapshot) -> String {
+    shared_snapshot
+        .read()
+        .ok()
+        .and_then(|current| {
+            current.as_ref().and_then(|snapshot| {
+                snapshot
+                    .local_ips
+                    .first()
+                    .map(|ip| format!("http://{ip}:{port}"))
+            })
+        })
+        .unwrap_or_else(|| format!("http://127.0.0.1:{port}"))
+}
+
+fn show_main_window(app: &AppHandle, dashboard_url: &str) {
     if let Some(window) = app.get_webview_window("main") {
+        if let Ok(url) = tauri::Url::parse(dashboard_url) {
+            let _ = window.navigate(url);
+        }
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
@@ -574,6 +599,50 @@ mod tests {
         assert_eq!(
             agent_summary(&providers),
             "Agents: OpenAI Codex 1, Claude Code 2, Gemini CLI 3"
+        );
+    }
+
+    #[test]
+    fn preferred_dashboard_url_uses_lan_ip_before_loopback() {
+        let shared_snapshot = Arc::new(RwLock::new(Some(Snapshot {
+            timestamp: 1,
+            hostname: "agent-host".to_string(),
+            local_ips: vec!["192.168.50.93".to_string()],
+            activity: Activity {
+                score: 10,
+                status: "quiet".to_string(),
+                active_process_count: 0,
+                total_cpu: 0.0,
+                total_memory: 0.0,
+            },
+            providers: Vec::new(),
+        })));
+
+        assert_eq!(
+            preferred_dashboard_url(8766, &shared_snapshot),
+            "http://192.168.50.93:8766"
+        );
+    }
+
+    #[test]
+    fn preferred_dashboard_url_falls_back_to_loopback_without_lan_ip() {
+        let shared_snapshot = Arc::new(RwLock::new(Some(Snapshot {
+            timestamp: 1,
+            hostname: "agent-host".to_string(),
+            local_ips: Vec::new(),
+            activity: Activity {
+                score: 10,
+                status: "quiet".to_string(),
+                active_process_count: 0,
+                total_cpu: 0.0,
+                total_memory: 0.0,
+            },
+            providers: Vec::new(),
+        })));
+
+        assert_eq!(
+            preferred_dashboard_url(8766, &shared_snapshot),
+            "http://127.0.0.1:8766"
         );
     }
 }

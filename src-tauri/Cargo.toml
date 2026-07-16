@@ -1,6 +1,6 @@
 [package]
 name = "agentwatch"
-version = "0.2.3"
+version = "0.2.4"
 description = "LAN dashboard and tray app for monitoring local LLM agents"
 authors = ["AgentWatch"]
 license = "MIT OR Apache-2.0"

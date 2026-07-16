@@ -31,7 +31,7 @@ pub fn run() {
             let server =
                 server::spawn_server(shared_snapshot.clone(), tray_enabled, update_state.clone())
                     .expect("start AgentWatch server");
-            let dashboard_url = format!("http://127.0.0.1:{}", server.port);
+            let dashboard_url = preferred_dashboard_url(server.port, &shared_snapshot);
             let tray_installed = if tray_enabled {
                 match tray::install(
                     &app_handle,
@@ -93,6 +93,28 @@ fn truthy_env(name: &str) -> bool {
 
 fn truthy_value(value: &str) -> bool {
     matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes")
+}
+
+fn preferred_dashboard_url(port: u16, shared_snapshot: &monitor::SharedSnapshot) -> String {
+    shared_snapshot
+        .read()
+        .ok()
+        .and_then(|current| {
+            current
+                .as_ref()
+                .and_then(|snapshot| first_lan_url(snapshot, port))
+        })
+        .unwrap_or_else(|| {
+            let snapshot = monitor::fast_snapshot();
+            first_lan_url(&snapshot, port).unwrap_or_else(|| format!("http://127.0.0.1:{port}"))
+        })
+}
+
+fn first_lan_url(snapshot: &monitor::Snapshot, port: u16) -> Option<String> {
+    snapshot
+        .local_ips
+        .first()
+        .map(|ip| format!("http://{ip}:{port}"))
 }
 
 #[cfg(target_os = "macos")]

@@ -65,6 +65,7 @@ assert.match(
   /server::spawn_server\(\s*shared_snapshot\.clone\(\),\s*tray_enabled,\s*update_state\.clone\(\)\s*\)/,
   "desktop app must start the embedded monitor server itself",
 );
+assert.match(libRs, /preferred_dashboard_url\(server\.port, &shared_snapshot\)/, "desktop app must prefer the LAN dashboard URL");
 assert.doesNotMatch(
   libRs,
   /Command::new|agentwatch-server/,
@@ -104,6 +105,9 @@ assert.match(trayRs, /Install update/, "tray update install action missing");
 assert.match(trayRs, /update_state\.check\(\)\.await/, "tray update check handler missing");
 assert.match(trayRs, /update_state\.install\(\)\.await/, "tray update install handler missing");
 assert.match(trayRs, /"quit" => app\.exit\(0\)/, "tray quit must terminate the desktop app and embedded monitor server");
+assert.match(trayRs, /fn preferred_dashboard_url/, "tray open action must compute a current dashboard URL");
+assert.match(trayRs, /local_ips[\s\S]*first\(\)[\s\S]*format!\("http:\/\/\{ip\}:\{port\}"\)/, "tray open action must prefer the LAN URL over loopback");
+assert.match(trayRs, /window\.navigate\(url\)/, "tray open action must navigate the dashboard window before showing it");
 assert.match(trayRs, /Agents:/, "tray menu must include active agent summary text");
 assert.match(trayRs, /fn agent_summary/, "tray menu must derive active agent summary from monitor providers");
 assert.match(trayRs, /set_tooltip/, "tray tooltip updates missing");
