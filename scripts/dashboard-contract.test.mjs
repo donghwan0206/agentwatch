@@ -104,7 +104,7 @@ for (const marker of [
   "observedTokens",
   "maxDayTokens",
   "observedTokens || 0",
-  "rate-limit 또는 quota 메시지",
+  "Codex CLI 로그인 상태",
   "remote-client-verification-${platform}.json",
   'verifier: "browser-dashboard"',
   'result: isRemote ? "passed" : "local-only"',
@@ -189,6 +189,12 @@ for (const marker of [
   "SeekFrom::Start(cursor)",
   "ORDER BY rowid DESC",
   "LIMIT 5000",
+  '"account/rateLimits/read"',
+  '"codex-app-server"',
+  '"CODEX_CLI_PATH"',
+  "codex-x86_64-pc-windows-msvc.exe",
+  "OpenAI.Codex_",
+  "Duration::from_secs(8)",
 ]) {
   assert.match(
     usageCollector,

@@ -5,8 +5,11 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -792,7 +795,7 @@ fn gemini_usage_roots() -> Vec<PathBuf> {
 fn terminal_discovery_command(provider: &str) -> String {
     if cfg!(target_os = "windows") {
         return match provider {
-            "codex" => "powershell -NoProfile -Command \"Get-ChildItem $env:USERPROFILE\\\\.codex -Recurse -File -Include logs_2.sqlite,*.jsonl -ErrorAction SilentlyContinue | Select-Object -First 50 -ExpandProperty FullName\"".to_string(),
+            "codex" => "powershell -NoProfile -Command \"$paths=@($env:CODEX_CLI_PATH,((Get-Command codex -ErrorAction SilentlyContinue).Source),($env:USERPROFILE+'\\.codex\\packages\\standalone\\current\\bin\\codex.exe'),($env:LOCALAPPDATA+'\\Programs\\OpenAI\\Codex\\bin\\codex.exe'),($env:LOCALAPPDATA+'\\OpenAI\\Codex\\bin\\codex.exe'),($env:USERPROFILE+'\\.codex\\auth.json'),($env:USERPROFILE+'\\.codex\\logs_2.sqlite')); $paths += Get-ChildItem ($env:APPDATA+'\\npm\\node_modules\\@openai\\codex') -Recurse -File -Filter codex.exe -ErrorAction SilentlyContinue | ForEach-Object FullName; $paths += Get-ChildItem ($env:LOCALAPPDATA+'\\Packages\\OpenAI.Codex_*\\LocalCache\\Local\\OpenAI\\Codex\\bin\\codex.exe'),($env:LOCALAPPDATA+'\\Microsoft\\WinGet\\Packages\\OpenAI.Codex_*\\codex*.exe') -ErrorAction SilentlyContinue | ForEach-Object FullName; $paths | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique\"".to_string(),
             "claude" => "powershell -NoProfile -Command \"Get-ChildItem $env:USERPROFILE\\\\.claude,$env:APPDATA\\\\Claude -Recurse -File -Include *.jsonl -ErrorAction SilentlyContinue | Select-Object -First 50 -ExpandProperty FullName\"".to_string(),
             "gemini" => "powershell -NoProfile -Command \"Get-ChildItem $env:USERPROFILE\\\\.gemini,$env:APPDATA\\\\Gemini -Recurse -File -Include *.json,*.jsonl,*.log -ErrorAction SilentlyContinue | Select-Object -First 50 -ExpandProperty FullName\"".to_string(),
             _ => String::new(),
@@ -1389,6 +1392,9 @@ fn collect_cached_daily(conn: &Connection, provider: Option<&str>, days: i64) ->
 }
 
 fn collect_latest_quota_snapshot(log_db: Option<&PathBuf>) -> Option<QuotaSnapshot> {
+    if let Some(snapshot) = collect_codex_app_server_quota_snapshot() {
+        return Some(snapshot);
+    }
     let sqlite = log_db.and_then(collect_sqlite_quota_snapshot);
     let jsonl = collect_session_quota_snapshot();
     match (sqlite, jsonl) {
@@ -1400,6 +1406,241 @@ fn collect_latest_quota_snapshot(log_db: Option<&PathBuf>) -> Option<QuotaSnapsh
         (Some(snapshot), None) | (None, Some(snapshot)) => Some(snapshot),
         (None, None) => None,
     }
+}
+
+fn collect_codex_app_server_quota_snapshot() -> Option<QuotaSnapshot> {
+    for binary in codex_binary_candidates() {
+        if let Some(snapshot) = query_codex_app_server(&binary) {
+            return Some(snapshot);
+        }
+    }
+    None
+}
+
+fn codex_binary_candidates() -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    for name in ["CODEX_CLI_PATH", "CODEX_BINARY"] {
+        if let Some(path) = std::env::var_os(name).filter(|value| !value.is_empty()) {
+            candidates.push(PathBuf::from(path));
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    append_windows_codex_binary_candidates(&mut candidates);
+
+    candidates.push(PathBuf::from("codex"));
+    let mut seen = std::collections::HashSet::new();
+    candidates
+        .into_iter()
+        .filter(|path| seen.insert(path.clone()))
+        .collect()
+}
+
+#[cfg(target_os = "windows")]
+fn append_windows_codex_binary_candidates(candidates: &mut Vec<PathBuf>) {
+    if let Some(user_profile) = std::env::var_os("USERPROFILE").map(PathBuf::from) {
+        candidates.push(user_profile.join(".codex/packages/standalone/current/bin/codex.exe"));
+    }
+    if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) {
+        candidates.push(local_app_data.join("OpenAI/Codex/bin/codex.exe"));
+        candidates.push(local_app_data.join("Programs/OpenAI/Codex/bin/codex.exe"));
+        let packages = local_app_data.join("Packages");
+        if let Ok(entries) = fs::read_dir(packages) {
+            for entry in entries.flatten() {
+                if entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("OpenAI.Codex_")
+                {
+                    candidates.push(
+                        entry
+                            .path()
+                            .join("LocalCache/Local/OpenAI/Codex/bin/codex.exe"),
+                    );
+                }
+            }
+        }
+        let winget_packages = local_app_data.join("Microsoft/WinGet/Packages");
+        if let Ok(entries) = fs::read_dir(winget_packages) {
+            for entry in entries.flatten() {
+                if entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("OpenAI.Codex_")
+                {
+                    for name in ["codex.exe", "codex-x86_64-pc-windows-msvc.exe"] {
+                        candidates.push(entry.path().join(name));
+                    }
+                }
+            }
+        }
+    }
+    if let Some(app_data) = std::env::var_os("APPDATA").map(PathBuf::from) {
+        let package_root = app_data.join("npm/node_modules/@openai/codex");
+        let bin = package_root.join("bin");
+        for name in [
+            "codex-x86_64-pc-windows-msvc.exe",
+            "codex-aarch64-pc-windows-msvc.exe",
+        ] {
+            candidates.push(bin.join(name));
+        }
+        if let Ok(entries) = fs::read_dir(&bin) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with("codex-") && name.ends_with("-pc-windows-msvc.exe") {
+                    candidates.push(entry.path());
+                }
+            }
+        }
+        for (package, target) in [
+            ("codex-win32-x64", "x86_64-pc-windows-msvc"),
+            ("codex-win32-arm64", "aarch64-pc-windows-msvc"),
+        ] {
+            let vendor = package_root
+                .join("node_modules/@openai")
+                .join(package)
+                .join("vendor")
+                .join(target);
+            candidates.push(vendor.join("codex/codex.exe"));
+            candidates.push(vendor.join("bin/codex.exe"));
+        }
+    }
+}
+
+fn query_codex_app_server(binary: &Path) -> Option<QuotaSnapshot> {
+    if binary.components().count() > 1 && !binary.is_file() {
+        return None;
+    }
+    let mut command = Command::new(binary);
+    command
+        .args(["-s", "read-only", "-a", "untrusted", "app-server"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    configure_background_command(&mut command);
+    let mut child = command.spawn().ok()?;
+    let mut stdin = child.stdin.take()?;
+    let stdout = child.stdout.take()?;
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            if let Ok(message) = serde_json::from_str::<Value>(&line) {
+                if sender.send(message).is_err() {
+                    break;
+                }
+            }
+        }
+    });
+
+    let result = (|| {
+        write_rpc_message(
+            &mut stdin,
+            &serde_json::json!({
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "clientInfo": {
+                        "name": "agentwatch",
+                        "title": "AgentWatch",
+                        "version": env!("CARGO_PKG_VERSION")
+                    }
+                }
+            }),
+        )?;
+        receive_rpc_response(&receiver, 1, Duration::from_secs(8))?;
+        write_rpc_message(
+            &mut stdin,
+            &serde_json::json!({"method": "initialized", "params": {}}),
+        )?;
+        write_rpc_message(
+            &mut stdin,
+            &serde_json::json!({
+                "id": 2,
+                "method": "account/rateLimits/read",
+                "params": {}
+            }),
+        )?;
+        let response = receive_rpc_response(&receiver, 2, Duration::from_secs(5))?;
+        let observed_at = Local::now().timestamp();
+        let quotas = quotas_from_app_server_response(&response, observed_at);
+        (!quotas.is_empty()).then(|| QuotaSnapshot {
+            source: "codex-app-server".to_string(),
+            source_path: binary.to_path_buf(),
+            observed_at,
+            quotas,
+        })
+    })();
+
+    drop(stdin);
+    let _ = child.kill();
+    let _ = child.wait();
+    result
+}
+
+fn write_rpc_message(stdin: &mut impl Write, message: &Value) -> Option<()> {
+    serde_json::to_writer(&mut *stdin, message).ok()?;
+    stdin.write_all(b"\n").ok()?;
+    stdin.flush().ok()
+}
+
+fn receive_rpc_response(
+    receiver: &mpsc::Receiver<Value>,
+    id: i64,
+    timeout: Duration,
+) -> Option<Value> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        let remaining = deadline.checked_duration_since(Instant::now())?;
+        let message = receiver.recv_timeout(remaining).ok()?;
+        if number_as_i64(message.get("id")) == Some(id) {
+            return message.get("error").is_none().then_some(message);
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn configure_background_command(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(target_os = "windows"))]
+fn configure_background_command(_command: &mut Command) {}
+
+fn quotas_from_app_server_response(response: &Value, ts: i64) -> Vec<Quota> {
+    let Some(result) = response.get("result") else {
+        return Vec::new();
+    };
+    let Some(main) = result
+        .get("rateLimits")
+        .or_else(|| result.get("rate_limits"))
+    else {
+        return Vec::new();
+    };
+    let mut quotas =
+        normalize_rate_limits(main, ts, string_field(main, &["planType", "plan_type"]));
+    let main_id = string_field(main, &["limitId", "limit_id"]);
+    if let Some(by_id) = result
+        .get("rateLimitsByLimitId")
+        .or_else(|| result.get("rate_limits_by_limit_id"))
+        .and_then(Value::as_object)
+    {
+        for (id, limit) in by_id {
+            if main_id == Some(id.as_str()) {
+                continue;
+            }
+            let label = string_field(limit, &["limitName", "limit_name"]).unwrap_or(id);
+            let plan = string_field(limit, &["planType", "plan_type"]).unwrap_or("unknown");
+            append_named_limit_windows(&mut quotas, label, limit, ts, plan);
+        }
+    }
+    quotas
+}
+
+fn string_field<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a str> {
+    keys.iter()
+        .find_map(|key| value.get(*key).and_then(Value::as_str))
 }
 
 fn quota_meta_from_snapshot(snapshot: &QuotaSnapshot, now: i64) -> QuotaMeta {
@@ -1588,12 +1829,21 @@ fn parse_timestamp(value: &str) -> Option<i64> {
 fn normalize_rate_limits(rate_limits: &Value, ts: i64, plan_type: Option<&str>) -> Vec<Quota> {
     let plan_type = plan_type.unwrap_or("unknown").to_string();
     let mut quotas = Vec::new();
-    if let Some(primary) = rate_limits.get("primary") {
-        quotas.push(normalize_limit("5시간", "primary", primary, ts, &plan_type));
-    }
-    if let Some(secondary) = rate_limits.get("secondary") {
+    if let Some(primary) = rate_limits.get("primary").filter(|value| !value.is_null()) {
         quotas.push(normalize_limit(
-            "1주",
+            quota_window_label(primary, "primary"),
+            "primary",
+            primary,
+            ts,
+            &plan_type,
+        ));
+    }
+    if let Some(secondary) = rate_limits
+        .get("secondary")
+        .filter(|value| !value.is_null())
+    {
+        quotas.push(normalize_limit(
+            quota_window_label(secondary, "secondary"),
             "secondary",
             secondary,
             ts,
@@ -1607,6 +1857,19 @@ fn normalize_rate_limits(rate_limits: &Value, ts: i64, plan_type: Option<&str>) 
         &plan_type,
     );
     quotas
+}
+
+fn quota_window_label<'a>(value: &Value, fallback: &'a str) -> &'a str {
+    match limit_window_minutes(value) {
+        Some(300) => "5시간",
+        Some(10080) => "1주",
+        _ => fallback,
+    }
+}
+
+fn limit_window_minutes(value: &Value) -> Option<i64> {
+    number_as_i64(value.get("window_minutes"))
+        .or_else(|| number_as_i64(value.get("windowDurationMins")))
 }
 
 fn append_additional_limits(
@@ -1624,6 +1887,20 @@ fn append_additional_limits(
     }
 }
 
+fn append_named_limit_windows(
+    quotas: &mut Vec<Quota>,
+    label: &str,
+    value: &Value,
+    ts: i64,
+    plan_type: &str,
+) {
+    for window in ["primary", "secondary"] {
+        if let Some(limit) = value.get(window).filter(|limit| !limit.is_null()) {
+            quotas.push(normalize_limit(label, "model", limit, ts, plan_type));
+        }
+    }
+}
+
 fn normalize_limit(
     label: &str,
     kind: &str,
@@ -1631,20 +1908,24 @@ fn normalize_limit(
     observed_at: i64,
     plan_type: &str,
 ) -> Quota {
-    let used_percent = number_as_i64(value.get("used_percent")).unwrap_or(0);
-    let reset_at =
-        number_as_i64(value.get("reset_at")).or_else(|| number_as_i64(value.get("resets_at")));
+    let used_percent = number_as_i64(value.get("used_percent"))
+        .or_else(|| number_as_i64(value.get("usedPercent")))
+        .unwrap_or(0);
+    let reset_at = number_as_i64(value.get("reset_at"))
+        .or_else(|| number_as_i64(value.get("resets_at")))
+        .or_else(|| number_as_i64(value.get("resetsAt")));
     Quota {
         label: label.to_string(),
         kind: kind.to_string(),
         plan_type: plan_type.to_string(),
         used_percent,
         remaining_percent: (100 - used_percent).max(0),
-        window_minutes: value.get("window_minutes").and_then(Value::as_i64),
+        window_minutes: limit_window_minutes(value),
         reset_at,
         reset_after_seconds: reset_at.map(|reset| (reset - observed_at).max(0)),
         limit_reached: value
             .get("limit_reached")
+            .or_else(|| value.get("limitReached"))
             .and_then(Value::as_bool)
             .unwrap_or(false),
         allowed: value
@@ -1855,6 +2136,89 @@ mod tests {
         assert_eq!(quotas[1].label, "1주");
         assert_eq!(quotas[1].remaining_percent, 66);
         assert_eq!(quotas[1].plan_type, "prolite");
+    }
+
+    #[test]
+    fn app_server_rate_limits_use_window_duration_instead_of_slot_position() {
+        let response = serde_json::json!({
+            "id": 2,
+            "result": {
+                "rateLimits": {
+                    "limitId": "codex",
+                    "primary": {
+                        "usedPercent": 14,
+                        "windowDurationMins": 10080,
+                        "resetsAt": 1784781380
+                    },
+                    "secondary": null,
+                    "planType": "prolite"
+                },
+                "rateLimitsByLimitId": {
+                    "codex": {
+                        "limitId": "codex",
+                        "primary": {
+                            "usedPercent": 14,
+                            "windowDurationMins": 10080,
+                            "resetsAt": 1784781380
+                        },
+                        "secondary": null,
+                        "planType": "prolite"
+                    },
+                    "codex_bengalfox": {
+                        "limitId": "codex_bengalfox",
+                        "limitName": "GPT-5.3-Codex-Spark",
+                        "primary": {
+                            "usedPercent": 0,
+                            "windowDurationMins": 10080,
+                            "resetsAt": 1784863081
+                        },
+                        "secondary": null,
+                        "planType": "prolite"
+                    }
+                }
+            }
+        });
+
+        let quotas = quotas_from_app_server_response(&response, 1784000000);
+
+        assert_eq!(quotas.len(), 2);
+        assert_eq!(quotas[0].label, "1주");
+        assert_eq!(quotas[0].window_minutes, Some(10080));
+        assert_eq!(quotas[0].remaining_percent, 86);
+        assert_eq!(quotas[0].plan_type, "prolite");
+        assert_eq!(quotas[1].kind, "model");
+        assert_eq!(quotas[1].label, "GPT-5.3-Codex-Spark");
+        assert!(!quotas.iter().any(|quota| quota.window_minutes == Some(300)));
+    }
+
+    #[test]
+    fn app_server_rate_limits_accept_both_standard_windows() {
+        let response = serde_json::json!({
+            "id": 2,
+            "result": {
+                "rateLimits": {
+                    "primary": {
+                        "usedPercent": 1.0,
+                        "windowDurationMins": 300,
+                        "resetsAt": 2000
+                    },
+                    "secondary": {
+                        "usedPercent": 2.0,
+                        "windowDurationMins": 10080,
+                        "resetsAt": 3000
+                    },
+                    "planType": "pro"
+                }
+            }
+        });
+
+        let quotas = quotas_from_app_server_response(&response, 1000);
+
+        assert_eq!(quotas.len(), 2);
+        assert_eq!(quotas[0].label, "5시간");
+        assert_eq!(quotas[0].remaining_percent, 99);
+        assert_eq!(quotas[1].label, "1주");
+        assert_eq!(quotas[1].remaining_percent, 98);
     }
 
     #[test]

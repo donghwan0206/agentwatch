@@ -442,7 +442,7 @@ function renderQuotas(providerQuotas) {
   if (!rows.length) {
     list.innerHTML = `
       <div class="empty">
-        수집 가능한 quota 로그가 아직 없습니다. 남은 사용량은 rate-limit 또는 quota 메시지가 로그에 남을 때 표시됩니다.
+        사용량 정보를 찾지 못했습니다. Codex CLI 로그인 상태와 로컬 로그 위치를 확인해 주세요.
       </div>
     `;
     return;
@@ -483,12 +483,12 @@ function renderQuotaMeta(usage) {
   const meta = usage?.quotaMeta || {};
   const refreshButton = $("quotaRefreshBtn");
   if (refreshButton) {
-    refreshButton.textContent = state.quotaRefreshStatus === "loading" ? "스캔 중" : "로그 재스캔";
+    refreshButton.textContent = state.quotaRefreshStatus === "loading" ? "수집 중" : "사용량 새로고침";
     refreshButton.disabled = state.quotaRefreshStatus === "loading";
   }
   if (!element) return;
   if (!meta.observedAt) {
-    element.innerHTML = '<span>quota rate-limit 로그 수집 대기</span>';
+    element.innerHTML = '<span>사용량 수집 대기</span>';
     return;
   }
   const staleClass = meta.stale ? "stale" : "fresh";
