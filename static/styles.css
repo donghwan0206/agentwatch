@@ -955,15 +955,56 @@ h2 {
 
 .usage-notes {
   color: var(--muted);
-  display: grid;
   font-size: 12px;
-  gap: 6px;
   line-height: 1.4;
   margin-top: 12px;
+  min-width: 0;
 }
 
 .usage-notes:empty {
   display: none;
+}
+
+.usage-notes-summary {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.usage-notes-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-notes-summary button {
+  background: transparent;
+  border: 0;
+  color: var(--soft);
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  padding: 2px 0;
+}
+
+.usage-notes-summary button:hover {
+  color: var(--text);
+}
+
+.usage-notes-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.usage-notes-list span {
+  overflow-wrap: anywhere;
 }
 
 .thread-list {

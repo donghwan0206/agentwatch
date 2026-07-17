@@ -524,9 +524,7 @@ fn usage_source_candidates() -> Vec<SourceCandidate> {
             format: SourceFormat::ClaudeJsonl,
         });
     }
-    for path in
-        collect_files_with_extensions(&gemini_usage_roots(), &["json", "jsonl", "log"], 1000)
-    {
+    for path in collect_files_with_extensions(&gemini_usage_roots(), &["json", "jsonl"], 1000) {
         let format = if path.extension().and_then(|value| value.to_str()) == Some("jsonl") {
             SourceFormat::GenericJsonl
         } else {
@@ -629,10 +627,15 @@ fn source_candidates_for_configured_path(
                 format: SourceFormat::ClaudeJsonl,
             })
             .collect(),
-        "gemini" => collect_files_with_extensions(&[path], &["json", "jsonl", "log"], 1000)
+        "gemini" => collect_files_with_extensions(&[path], &["json", "jsonl"], 1000)
             .into_iter()
             .map(|file| {
-                let format = if file.extension().and_then(|value| value.to_str()) == Some("jsonl") {
+                let format = if file
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .map(|value| value.eq_ignore_ascii_case("jsonl"))
+                    .unwrap_or(false)
+                {
                     SourceFormat::GenericJsonl
                 } else {
                     SourceFormat::GenericJson
@@ -652,13 +655,14 @@ fn source_candidate_for_file(provider: &'static str, path: PathBuf) -> Option<So
     let extension = path
         .extension()
         .and_then(|value| value.to_str())
-        .unwrap_or("");
-    let format = match provider {
-        "codex" if extension == "sqlite" => SourceFormat::CodexSqlite,
-        "codex" if extension == "jsonl" => SourceFormat::CodexJsonl,
-        "claude" if extension == "jsonl" => SourceFormat::ClaudeJsonl,
-        "gemini" if extension == "jsonl" => SourceFormat::GenericJsonl,
-        "gemini" if matches!(extension, "json" | "log") => SourceFormat::GenericJson,
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let format = match (provider, extension.as_str()) {
+        ("codex", "sqlite") => SourceFormat::CodexSqlite,
+        ("codex", "jsonl") => SourceFormat::CodexJsonl,
+        ("claude", "jsonl") => SourceFormat::ClaudeJsonl,
+        ("gemini", "jsonl") => SourceFormat::GenericJsonl,
+        ("gemini", "json") => SourceFormat::GenericJson,
         _ => return None,
     };
     Some(SourceCandidate {
@@ -695,7 +699,7 @@ fn matching_usage_file_count(provider: &str, path: &Path) -> usize {
     }
     let extensions = match provider {
         "codex" | "claude" => vec!["jsonl"],
-        "gemini" => vec!["json", "jsonl", "log"],
+        "gemini" => vec!["json", "jsonl"],
         _ => Vec::new(),
     };
     let mut count = collect_files_with_extensions(&[path.to_path_buf()], &extensions, 2000).len();
@@ -783,12 +787,13 @@ fn gemini_home() -> PathBuf {
 }
 
 fn gemini_usage_roots() -> Vec<PathBuf> {
+    let root = gemini_home();
     vec![
-        gemini_home(),
-        home_path(".config/gemini"),
-        home_path("Library/Application Support/com.google.GeminiMacOS"),
-        home_path("Library/Application Support/Gemini"),
-        home_path("AppData/Roaming/Gemini"),
+        root.join("tmp"),
+        home_path(".config/gemini/tmp"),
+        home_path("Library/Application Support/com.google.GeminiMacOS/tmp"),
+        home_path("Library/Application Support/Gemini/tmp"),
+        home_path("AppData/Roaming/Gemini/tmp"),
     ]
 }
 
@@ -797,14 +802,14 @@ fn terminal_discovery_command(provider: &str) -> String {
         return match provider {
             "codex" => "powershell -NoProfile -Command \"$paths=@($env:CODEX_CLI_PATH,((Get-Command codex -ErrorAction SilentlyContinue).Source),($env:USERPROFILE+'\\.codex\\packages\\standalone\\current\\bin\\codex.exe'),($env:LOCALAPPDATA+'\\Programs\\OpenAI\\Codex\\bin\\codex.exe'),($env:LOCALAPPDATA+'\\OpenAI\\Codex\\bin\\codex.exe'),($env:USERPROFILE+'\\.codex\\auth.json'),($env:USERPROFILE+'\\.codex\\logs_2.sqlite')); $paths += Get-ChildItem ($env:APPDATA+'\\npm\\node_modules\\@openai\\codex') -Recurse -File -Filter codex.exe -ErrorAction SilentlyContinue | ForEach-Object FullName; $paths += Get-ChildItem ($env:LOCALAPPDATA+'\\Packages\\OpenAI.Codex_*\\LocalCache\\Local\\OpenAI\\Codex\\bin\\codex.exe'),($env:LOCALAPPDATA+'\\Microsoft\\WinGet\\Packages\\OpenAI.Codex_*\\codex*.exe') -ErrorAction SilentlyContinue | ForEach-Object FullName; $paths | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique\"".to_string(),
             "claude" => "powershell -NoProfile -Command \"Get-ChildItem $env:USERPROFILE\\\\.claude,$env:APPDATA\\\\Claude -Recurse -File -Include *.jsonl -ErrorAction SilentlyContinue | Select-Object -First 50 -ExpandProperty FullName\"".to_string(),
-            "gemini" => "powershell -NoProfile -Command \"Get-ChildItem $env:USERPROFILE\\\\.gemini,$env:APPDATA\\\\Gemini -Recurse -File -Include *.json,*.jsonl,*.log -ErrorAction SilentlyContinue | Select-Object -First 50 -ExpandProperty FullName\"".to_string(),
+            "gemini" => "powershell -NoProfile -Command \"$root=if($env:GEMINI_CONFIG_DIR){$env:GEMINI_CONFIG_DIR}else{$env:USERPROFILE+'\\.gemini'}; Get-ChildItem ($root+'\\tmp'),($env:APPDATA+'\\Gemini\\tmp') -Recurse -File -Include *.json,*.jsonl -ErrorAction SilentlyContinue | Select-Object -First 50 -ExpandProperty FullName\"".to_string(),
             _ => String::new(),
         };
     }
     match provider {
         "codex" => "find \"${CODEX_HOME:-$HOME/.codex}\" -type f \\( -name 'logs_2.sqlite' -o -name '*.jsonl' \\) -print 2>/dev/null | head -50".to_string(),
         "claude" => "find \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}\" \"$HOME/Library/Application Support/Claude\" \"$HOME/Library/Application Support/Claude Code\" \"$HOME/.config/claude\" -type f -name '*.jsonl' -print 2>/dev/null | head -50".to_string(),
-        "gemini" => "find \"${GEMINI_CONFIG_DIR:-$HOME/.gemini}\" \"$HOME/.config/gemini\" \"$HOME/Library/Application Support/com.google.GeminiMacOS\" \"$HOME/Library/Application Support/Gemini\" -type f \\( -name '*.json' -o -name '*.jsonl' -o -name '*.log' \\) -print 2>/dev/null | head -50".to_string(),
+        "gemini" => "find \"${GEMINI_CONFIG_DIR:-$HOME/.gemini}/tmp\" \"$HOME/.config/gemini/tmp\" \"$HOME/Library/Application Support/com.google.GeminiMacOS/tmp\" \"$HOME/Library/Application Support/Gemini/tmp\" -type f \\( -name '*.json' -o -name '*.jsonl' \\) -print 2>/dev/null | head -50".to_string(),
         _ => String::new(),
     }
 }
@@ -829,6 +834,9 @@ fn collect_files_with_extensions(
 }
 
 fn collect_files(dir: &Path, extensions: &[&str], files: &mut Vec<PathBuf>) {
+    if should_skip_usage_directory(dir) {
+        return;
+    }
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
@@ -839,12 +847,28 @@ fn collect_files(dir: &Path, extensions: &[&str], files: &mut Vec<PathBuf>) {
         } else if path
             .extension()
             .and_then(|value| value.to_str())
-            .map(|extension| extensions.iter().any(|candidate| candidate == &extension))
+            .map(|extension| {
+                extensions
+                    .iter()
+                    .any(|candidate| extension.eq_ignore_ascii_case(candidate))
+            })
             .unwrap_or(false)
         {
             files.push(path);
         }
     }
+}
+
+fn should_skip_usage_directory(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|value| value.to_str())
+        .map(|name| {
+            matches!(
+                name.to_ascii_lowercase().as_str(),
+                "antigravity-browser-profile" | "code_tracker"
+            )
+        })
+        .unwrap_or(false)
 }
 
 fn source_signature(path: &Path) -> Option<String> {
@@ -1392,6 +1416,9 @@ fn collect_cached_daily(conn: &Connection, provider: Option<&str>, days: i64) ->
 }
 
 fn collect_latest_quota_snapshot(log_db: Option<&PathBuf>) -> Option<QuotaSnapshot> {
+    if let Some(snapshot) = collect_chatgpt_usage_quota_snapshot() {
+        return Some(snapshot);
+    }
     if let Some(snapshot) = collect_codex_app_server_quota_snapshot() {
         return Some(snapshot);
     }
@@ -1406,6 +1433,67 @@ fn collect_latest_quota_snapshot(log_db: Option<&PathBuf>) -> Option<QuotaSnapsh
         (Some(snapshot), None) | (None, Some(snapshot)) => Some(snapshot),
         (None, None) => None,
     }
+}
+
+fn collect_chatgpt_usage_quota_snapshot() -> Option<QuotaSnapshot> {
+    let auth_path = codex_home().join("auth.json");
+    let auth: Value = serde_json::from_str(&fs::read_to_string(&auth_path).ok()?).ok()?;
+    let (access_token, account_id) = codex_auth_credentials(&auth)?;
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .ok()?;
+    let response = client
+        .get("https://chatgpt.com/backend-api/wham/usage")
+        .header(reqwest::header::ACCEPT, "application/json")
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .header("ChatGPT-Account-Id", account_id)
+        .bearer_auth(access_token)
+        .send()
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json::<Value>()
+        .ok()?;
+    let observed_at = Local::now().timestamp();
+    let quotas = quotas_from_chatgpt_usage_response(&response, observed_at);
+    (!quotas.is_empty()).then(|| QuotaSnapshot {
+        source: "chatgpt-wham-api".to_string(),
+        source_path: auth_path,
+        observed_at,
+        quotas,
+    })
+}
+
+fn codex_auth_credentials(auth: &Value) -> Option<(&str, &str)> {
+    let tokens = auth.get("tokens")?;
+    Some((
+        tokens.get("access_token")?.as_str()?,
+        tokens.get("account_id")?.as_str()?,
+    ))
+    .filter(|(access_token, account_id)| !access_token.is_empty() && !account_id.is_empty())
+}
+
+fn quotas_from_chatgpt_usage_response(response: &Value, ts: i64) -> Vec<Quota> {
+    let Some(rate_limit) = response.get("rate_limit") else {
+        return Vec::new();
+    };
+    let plan_type = string_field(response, &["plan_type", "planType"]).unwrap_or("unknown");
+    [
+        ("primary_window", "5시간", "primary", 300),
+        ("secondary_window", "1주", "secondary", 10080),
+    ]
+    .into_iter()
+    .filter_map(|(field, label, kind, window_minutes)| {
+        let value = rate_limit.get(field).filter(|value| !value.is_null())?;
+        let mut normalized = value.clone();
+        normalized
+            .as_object_mut()?
+            .insert("window_minutes".to_string(), Value::from(window_minutes));
+        Some(normalize_limit(label, kind, &normalized, ts, plan_type))
+    })
+    .collect()
 }
 
 fn collect_codex_app_server_quota_snapshot() -> Option<QuotaSnapshot> {
@@ -2048,10 +2136,16 @@ fn display_path(path: &PathBuf) -> String {
 }
 
 fn home_dir() -> PathBuf {
-    std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
+    let variables = if cfg!(target_os = "windows") {
+        ["USERPROFILE", "HOME"]
+    } else {
+        ["HOME", "USERPROFILE"]
+    };
+    variables
+        .into_iter()
+        .find_map(|name| std::env::var_os(name).filter(|value| !value.is_empty()))
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."))
+        .unwrap_or_else(|| PathBuf::from("."))
 }
 
 fn local_day(ts: i64) -> String {
@@ -2219,6 +2313,56 @@ mod tests {
         assert_eq!(quotas[0].remaining_percent, 99);
         assert_eq!(quotas[1].label, "1주");
         assert_eq!(quotas[1].remaining_percent, 98);
+    }
+
+    #[test]
+    fn chatgpt_usage_response_matches_stream_deck_windows() {
+        let response = serde_json::json!({
+            "plan_type": "pro",
+            "rate_limit": {
+                "primary_window": { "used_percent": 1.0, "reset_at": 2000 },
+                "secondary_window": { "used_percent": 0.0, "reset_at": 3000 }
+            }
+        });
+
+        let quotas = quotas_from_chatgpt_usage_response(&response, 1000);
+
+        assert_eq!(quotas.len(), 2);
+        assert_eq!(quotas[0].label, "5시간");
+        assert_eq!(quotas[0].window_minutes, Some(300));
+        assert_eq!(quotas[0].remaining_percent, 99);
+        assert_eq!(quotas[1].label, "1주");
+        assert_eq!(quotas[1].window_minutes, Some(10080));
+        assert_eq!(quotas[1].remaining_percent, 100);
+        assert_eq!(quotas[1].reset_after_seconds, Some(2000));
+    }
+
+    #[test]
+    fn codex_auth_credentials_require_stream_deck_token_shape() {
+        let auth = serde_json::json!({
+            "tokens": { "access_token": "access", "account_id": "account" }
+        });
+        assert_eq!(codex_auth_credentials(&auth), Some(("access", "account")));
+        assert_eq!(
+            codex_auth_credentials(&serde_json::json!({"tokens": {}})),
+            None
+        );
+    }
+
+    #[test]
+    fn gemini_scan_skips_browser_databases_and_tracker_files() {
+        assert!(should_skip_usage_directory(Path::new(
+            "/Users/agent/.gemini/antigravity-browser-profile"
+        )));
+        assert!(should_skip_usage_directory(Path::new(
+            "/Users/agent/.gemini/code_tracker"
+        )));
+        assert!(!should_skip_usage_directory(Path::new(
+            "/Users/agent/.gemini/tmp"
+        )));
+        assert!(gemini_usage_roots()
+            .iter()
+            .all(|path| path.file_name().and_then(|value| value.to_str()) == Some("tmp")));
     }
 
     #[test]

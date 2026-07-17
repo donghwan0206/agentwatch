@@ -16,6 +16,7 @@ const state = {
   lanCopyStatus: "idle",
   selectedTokenProvider: "all",
   tokenGrassStickToToday: true,
+  usageNotesExpanded: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -557,6 +558,7 @@ function renderTokenProviderFilters(usageItems) {
     button.addEventListener("click", () => {
       state.selectedTokenProvider = button.dataset.provider || "all";
       state.tokenGrassStickToToday = true;
+      state.usageNotesExpanded = false;
       renderUsage();
     });
   });
@@ -650,15 +652,28 @@ function renderGoalUsage(usage) {
 }
 
 function renderUsageNotes(usage) {
-  const notes = usage?.notes || [];
+  const notes = Array.isArray(usage?.notes) ? usage.notes : [];
   const element = $("usageNotes");
   if (!notes.length) {
+    state.usageNotesExpanded = false;
+    element.classList.remove("expanded");
     element.innerHTML = "";
     return;
   }
-  element.innerHTML = notes
-    .map((note) => `<span>${escapeHtml(note)}</span>`)
-    .join("");
+  const expanded = state.usageNotesExpanded;
+  const preview = expanded ? `수집 로그 ${notes.length}개` : notes[0];
+  element.classList.toggle("expanded", expanded);
+  element.innerHTML = `
+    <div class="usage-notes-summary">
+      <span class="usage-notes-preview" title="${escapeHtml(notes[0])}">${escapeHtml(preview)}</span>
+      <button id="usageNotesToggle" type="button" aria-expanded="${expanded}">${expanded ? "로그 접기" : `전체 로그 ${notes.length}개`}</button>
+    </div>
+    ${expanded ? `<div class="usage-notes-list">${notes.map((note) => `<span>${escapeHtml(note)}</span>`).join("")}</div>` : ""}
+  `;
+  $("usageNotesToggle")?.addEventListener("click", () => {
+    state.usageNotesExpanded = !state.usageNotesExpanded;
+    renderUsageNotes(usage);
+  });
 }
 
 function renderThreads(usage) {
