@@ -25,6 +25,14 @@ The primary end-user runtime is the desktop tray app. Install and run it on the 
 
 For normal installs, download the desktop release artifact for your OS. On Windows, use `AgentWatch_<version>_x64-setup.exe`; do not install the service-only helper unless you intentionally want a headless deployment without a tray icon.
 
+macOS supports a checksum-verified terminal installer:
+
+```bash
+curl -fsSL https://github.com/donghwan0206/agentwatch/releases/latest/download/install-macos-app.sh | bash
+```
+
+Alternatively, download the macOS DMG, drag AgentWatch to Applications, and follow [the manual Gatekeeper approval steps](docs/macos-installation.md). The no-cost macOS release is ad-hoc signed rather than Apple-notarized.
+
 ## Rust Headless Server
 
 The standalone Rust server is still available for development and advanced headless deployments. It is not required when you use the desktop tray app.

@@ -121,6 +121,9 @@ assert.match(
 assert.match(workflow, /bash scripts\/verify-macos-signatures\.sh/, "macOS bundle signature verification missing");
 assert.match(workflow, /AgentWatch-macOS\.app\.zip/, "macOS app zip direct release missing");
 assert.match(workflow, /-name '\*\.dmg'/, "macOS DMG direct release missing");
+assert.match(workflow, /install-macos-app\.sh/, "macOS terminal installer release missing");
+assert.match(workflow, /AgentWatch\.app\.tar\.gz\.sha256/, "macOS installer checksum release missing");
+assert.match(workflow, /macos-installation\.md/, "macOS manual approval guide release missing");
 assert.match(
   workflow,
   /npm run release:verify-desktop-archives -- desktop-archives/,

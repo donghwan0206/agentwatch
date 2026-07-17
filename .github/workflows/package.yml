@@ -453,6 +453,14 @@ jobs:
           find desktop-release-assets -type f \
             \( -name '*.dmg' -o -name 'AgentWatch-macOS.app.zip' \) \
             -exec cp {} desktop-updater-assets/ \;
+          cp scripts/install-macos-app.sh desktop-updater-assets/install-macos-app.sh
+          cp docs/macos-installation.md desktop-updater-assets/macos-installation.md
+          test -f desktop-updater-assets/AgentWatch.app.tar.gz
+          (cd desktop-updater-assets && shasum -a 256 AgentWatch.app.tar.gz > AgentWatch.app.tar.gz.sha256)
+          for package in desktop-updater-assets/*.dmg desktop-updater-assets/AgentWatch-macOS.app.zip; do
+            test -f "$package" || continue
+            shasum -a 256 "$package" > "${package}.sha256"
+          done
           mapfile -t files < <(find desktop-archives desktop-updater-assets -maxdepth 1 -type f | sort)
           test "${#files[@]}" -gt 0
 
