@@ -118,6 +118,9 @@ assert.match(
   /npm run release:bundle-desktop -- --input desktop-release-assets --output desktop-archives/,
   "desktop archive bundling step missing",
 );
+assert.match(workflow, /bash scripts\/verify-macos-signatures\.sh/, "macOS bundle signature verification missing");
+assert.match(workflow, /AgentWatch-macOS\.app\.zip/, "macOS app zip direct release missing");
+assert.match(workflow, /-name '\*\.dmg'/, "macOS DMG direct release missing");
 assert.match(
   workflow,
   /npm run release:verify-desktop-archives -- desktop-archives/,

@@ -206,6 +206,7 @@ jobs:
           bash -n scripts/verify-tray-macos.sh
           bash -n scripts/verify-tray-macos-capture.sh
           bash -n scripts/create-macos-dmg.sh
+          bash -n scripts/verify-macos-signatures.sh
           bash -n scripts/verify-tray-linux.sh
           bash -n scripts/verify-tray-linux-capture.sh
           bash -n scripts/verify-service-macos.sh
@@ -269,6 +270,10 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Verify macOS bundle signatures
+        if: runner.os == 'macOS'
+        run: bash scripts/verify-macos-signatures.sh
 
       - name: Collect release assets
         run: npm run release:collect -- release-assets
@@ -445,6 +450,9 @@ jobs:
             --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}" \
             --version "${version}" \
             --output desktop-updater-assets/latest.json
+          find desktop-release-assets -type f \
+            \( -name '*.dmg' -o -name 'AgentWatch-macOS.app.zip' \) \
+            -exec cp {} desktop-updater-assets/ \;
           mapfile -t files < <(find desktop-archives desktop-updater-assets -maxdepth 1 -type f | sort)
           test "${#files[@]}" -gt 0
 

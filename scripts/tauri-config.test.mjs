@@ -31,6 +31,7 @@ assert.equal(bundle.linux?.deb?.priority, "optional");
 assert.equal(bundle.linux?.rpm?.release, "1");
 assert.equal(bundle.macOS?.bundleName, "AgentWatch");
 assert.equal(bundle.macOS?.hardenedRuntime, true);
+assert.equal(bundle.macOS?.signingIdentity, "-");
 assert.equal(bundle.macOS?.minimumSystemVersion, "11.0");
 assert.equal(bundle.macOS?.infoPlist, "Info.plist");
 assert.match(config.plugins?.updater?.pubkey || "", /^[A-Za-z0-9+/=]+$/, "updater public key missing");
