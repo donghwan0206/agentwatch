@@ -1,6 +1,23 @@
 # macOS Installation
 
-AgentWatch supports two no-cost installation paths. The macOS build is ad-hoc signed and is not Apple-notarized.
+AgentWatch supports three no-cost installation paths. The macOS build is ad-hoc signed and is not Apple-notarized.
+
+## Homebrew Cask
+
+On an Apple Silicon Mac with Homebrew installed, run:
+
+```bash
+brew install --cask donghwan0206/agentwatch/agentwatch
+```
+
+Upgrade and uninstall with:
+
+```bash
+brew upgrade --cask donghwan0206/agentwatch/agentwatch
+brew uninstall --cask agentwatch
+```
+
+The dedicated Tap checks the latest AgentWatch release every 15 minutes, pins the DMG SHA-256, and removes the quarantine attribute after installation. A fully qualified install trusts only this Cask rather than the entire third-party Tap.
 
 ## Terminal Installer
 

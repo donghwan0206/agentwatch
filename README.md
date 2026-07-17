@@ -25,6 +25,15 @@ The primary end-user runtime is the desktop tray app. Install and run it on the 
 
 For normal installs, download the desktop release artifact for your OS. On Windows, use `AgentWatch_<version>_x64-setup.exe`; do not install the service-only helper unless you intentionally want a headless deployment without a tray icon.
 
+On Apple Silicon macOS, install and upgrade with the dedicated Homebrew Cask:
+
+```bash
+brew install --cask donghwan0206/agentwatch/agentwatch
+brew upgrade --cask donghwan0206/agentwatch/agentwatch
+```
+
+The [AgentWatch Homebrew Tap](https://github.com/donghwan0206/homebrew-agentwatch) checks for new releases every 15 minutes and pins each DMG SHA-256.
+
 macOS supports a checksum-verified terminal installer:
 
 ```bash
