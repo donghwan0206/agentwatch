@@ -767,6 +767,15 @@ h2 {
   color: #697482;
 }
 
+.quota-window.unlimited .quota-window-top strong {
+  color: var(--green);
+  font-size: 15px;
+}
+
+.quota-window.unlimited .quota-bar span {
+  background: rgba(37, 194, 154, 0.5);
+}
+
 .quota-bar {
   background: #10161d;
   border-radius: 999px;

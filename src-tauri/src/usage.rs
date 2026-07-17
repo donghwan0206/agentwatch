@@ -1485,8 +1485,14 @@ fn quotas_from_chatgpt_usage_response(response: &Value, ts: i64) -> Vec<Quota> {
         ("secondary_window", "1주", "secondary", 10080),
     ]
     .into_iter()
-    .filter_map(|(field, label, kind, window_minutes)| {
+    .filter_map(|(field, fallback_label, fallback_kind, fallback_minutes)| {
         let value = rate_limit.get(field).filter(|value| !value.is_null())?;
+        let window_minutes = limit_window_minutes(value).unwrap_or(fallback_minutes);
+        let (label, kind) = match window_minutes {
+            300 => ("5시간", "primary"),
+            10080 => ("1주", "secondary"),
+            _ => (fallback_label, fallback_kind),
+        };
         let mut normalized = value.clone();
         normalized
             .as_object_mut()?
@@ -1958,6 +1964,13 @@ fn quota_window_label<'a>(value: &Value, fallback: &'a str) -> &'a str {
 fn limit_window_minutes(value: &Value) -> Option<i64> {
     number_as_i64(value.get("window_minutes"))
         .or_else(|| number_as_i64(value.get("windowDurationMins")))
+        .or_else(|| {
+            number_as_i64(value.get("limit_window_seconds"))
+                .or_else(|| number_as_i64(value.get("limitWindowSeconds")))
+                .or_else(|| number_as_i64(value.get("window_duration_seconds")))
+                .or_else(|| number_as_i64(value.get("windowDurationSecs")))
+                .map(|seconds| seconds / 60)
+        })
 }
 
 fn append_additional_limits(
@@ -2335,6 +2348,31 @@ mod tests {
         assert_eq!(quotas[1].window_minutes, Some(10080));
         assert_eq!(quotas[1].remaining_percent, 100);
         assert_eq!(quotas[1].reset_after_seconds, Some(2000));
+    }
+
+    #[test]
+    fn chatgpt_usage_response_classifies_weekly_primary_window_by_duration() {
+        let response = serde_json::json!({
+            "plan_type": "pro",
+            "rate_limit": {
+                "primary_window": {
+                    "used_percent": 25.0,
+                    "limit_window_seconds": 604800,
+                    "reset_after_seconds": 462556,
+                    "reset_at": 1784781381
+                },
+                "secondary_window": null
+            }
+        });
+
+        let quotas = quotas_from_chatgpt_usage_response(&response, 1784318825);
+
+        assert_eq!(quotas.len(), 1);
+        assert_eq!(quotas[0].label, "1주");
+        assert_eq!(quotas[0].kind, "secondary");
+        assert_eq!(quotas[0].window_minutes, Some(10080));
+        assert_eq!(quotas[0].remaining_percent, 75);
+        assert_eq!(quotas[0].reset_after_seconds, Some(462556));
     }
 
     #[test]

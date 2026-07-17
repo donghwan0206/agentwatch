@@ -409,10 +409,13 @@ function providerQuotaSummaries(usageItems) {
   return providers.map((provider) => {
     const usage = findUsageByAliases(usageItems, provider.aliases);
     const quotas = Array.isArray(usage?.quotas) ? usage.quotas.filter((quota) => quota.kind !== "model") : [];
+    const fiveHour = findQuotaForWindow(quotas, 300, ["5시간", "5 hour", "5-hour", "5h", "primary"]);
+    const weekly = findQuotaForWindow(quotas, 10080, ["1주", "weekly", "week", "7 day", "7-day", "7d", "secondary"]);
     return {
       ...provider,
-      fiveHour: findQuotaForWindow(quotas, 300, ["5시간", "5 hour", "5-hour", "5h", "primary"]),
-      weekly: findQuotaForWindow(quotas, 10080, ["1주", "weekly", "week", "7 day", "7-day", "7d", "secondary"]),
+      fiveHour,
+      fiveHourUnlimited: provider.key === "gpt" && !fiveHour && Boolean(weekly),
+      weekly,
       source: quotas.length ? usage?.quotaMeta?.source || usage?.source || null : null,
       quotaMeta: usage?.quotaMeta || null,
     };
@@ -451,7 +454,7 @@ function renderQuotas(providerQuotas) {
 
   list.innerHTML = rows
     .map((row) => {
-      const fiveHour = quotaWindowView(row.fiveHour);
+      const fiveHour = quotaWindowView(row.fiveHour, row.fiveHourUnlimited);
       const weekly = quotaWindowView(row.weekly);
       const meta = quotaRowMeta(row.quotaMeta);
       return `
@@ -503,8 +506,17 @@ function renderQuotaMeta(usage) {
   `;
 }
 
-function quotaWindowView(quota) {
+function quotaWindowView(quota, unlimited = false) {
   if (!quota) {
+    if (unlimited) {
+      return {
+        value: "제한 없음",
+        meta: "현재 미적용",
+        remaining: 100,
+        available: true,
+        unlimited: true,
+      };
+    }
     return { value: "-", meta: "수집 전", remaining: 0, available: false };
   }
   const remaining = clamp(Number(quota.remainingPercent ?? 0), 0, 100);
@@ -514,17 +526,18 @@ function quotaWindowView(quota) {
     meta: reset,
     remaining,
     available: true,
+    unlimited: false,
   };
 }
 
 function renderQuotaWindow(label, view) {
   return `
-    <div class="quota-window ${view.available ? "" : "missing"}">
+    <div class="quota-window ${view.available ? "" : "missing"} ${view.unlimited ? "unlimited" : ""}">
       <div class="quota-window-top">
         <span>${label}</span>
         <strong>${escapeHtml(view.value)}</strong>
       </div>
-      <div class="quota-bar" title="${label} remaining ${escapeHtml(view.value)}">
+      <div class="quota-bar" title="${label} ${view.unlimited ? "제한 없음" : `remaining ${escapeHtml(view.value)}`}">
         <span style="--remaining: ${view.remaining}%"></span>
       </div>
       <small>${escapeHtml(view.meta)}</small>
