@@ -1,6 +1,6 @@
 {
   "name": "agentwatch",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "private": true,
   "description": "Desktop tray app with an embedded LAN monitor for local LLM agents.",
   "scripts": {
@@ -67,7 +67,7 @@
     "test:macos-signature-script": "bash -n scripts/verify-macos-signatures.sh",
     "test:tauri-config": "node scripts/tauri-config.test.mjs",
     "test:release-readiness": "node scripts/release-readiness.test.mjs",
-    "test": "npm run test:release-scripts && node scripts/tauri-config.test.mjs && node scripts/release-readiness.test.mjs && node scripts/python-unittest.mjs && cargo test --manifest-path src-tauri/Cargo.toml",
+    "test": "npm run test:release-scripts && node scripts/tauri-config.test.mjs && node scripts/release-readiness.test.mjs && node scripts/i18n.test.mjs && node scripts/python-unittest.mjs && cargo test --manifest-path src-tauri/Cargo.toml",
     "release:audit": "node scripts/release-audit.mjs"
   },
   "devDependencies": {

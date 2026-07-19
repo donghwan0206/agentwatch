@@ -26,6 +26,7 @@ const FALLBACK_PORT_END: u16 = 8799;
 const MONITOR_SAMPLE_INTERVAL_SECONDS: u64 = 60;
 const USAGE_REFRESH_INTERVAL_SECONDS: u64 = 600;
 const INDEX_HTML: &str = include_str!("../../static/index.html");
+const I18N_JS: &str = include_str!("../../static/i18n.js");
 const APP_JS: &str = include_str!("../../static/app.js");
 const STYLES_CSS: &str = include_str!("../../static/styles.css");
 
@@ -139,6 +140,7 @@ fn spawn_server_with_runtime(
             spawn_usage_loop(Arc::clone(&state));
             let app = Router::new()
                 .route("/", get(index))
+                .route("/i18n.js", get(i18n_js))
                 .route("/app.js", get(app_js))
                 .route("/styles.css", get(styles_css))
                 .route("/api/runtime", get(runtime_route))
@@ -475,6 +477,10 @@ fn event_level(status: &str) -> &'static str {
 
 async fn index() -> Html<&'static str> {
     Html(INDEX_HTML)
+}
+
+async fn i18n_js() -> Response {
+    with_content_type(I18N_JS, "application/javascript; charset=utf-8")
 }
 
 async fn app_js() -> Response {

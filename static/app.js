@@ -1,3 +1,5 @@
+const I18N = window.AgentWatchI18n;
+
 const state = {
   runtime: null,
   snapshot: null,
@@ -17,9 +19,11 @@ const state = {
   selectedTokenProvider: "all",
   tokenGrassStickToToday: true,
   usageNotesExpanded: false,
+  locale: I18N.initialLocale(window.localStorage, navigator),
 };
 
 const $ = (id) => document.getElementById(id);
+const t = (key, variables) => I18N.translate(state.locale, key, variables);
 const LIVE_REFRESH_MS = 60_000;
 const ACTIVITY_REFRESH_MS = 120_000;
 const USAGE_REFRESH_MS = 600_000;
@@ -191,36 +195,73 @@ function render() {
   renderEvents();
 }
 
+function applyStaticTranslations() {
+  document.documentElement.lang = state.locale;
+  document.querySelectorAll("[data-i18n]").forEach((element) => {
+    element.textContent = t(element.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-aria-label]").forEach((element) => {
+    element.setAttribute("aria-label", t(element.dataset.i18nAriaLabel));
+  });
+  document.querySelectorAll("[data-i18n-title]").forEach((element) => {
+    element.title = t(element.dataset.i18nTitle);
+  });
+  renderLocaleControls();
+}
+
+function renderLocaleControls() {
+  document.querySelectorAll("[data-locale]").forEach((button) => {
+    const active = button.dataset.locale === state.locale;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function setLocale(locale) {
+  const normalized = I18N.normalizeLocale(locale);
+  if (!normalized || normalized === state.locale) return;
+  state.locale = normalized;
+  I18N.saveLocale(window.localStorage, normalized);
+  applyStaticTranslations();
+  render();
+}
+
 function renderUpdatePanel() {
   const status = state.updateStatus || {};
   const phase = status.phase || "idle";
   const busy = ["checking", "downloading", "installing", "restarting"].includes(phase);
   $("updateStatusText").textContent = updateStatusCopy(status);
   $("updateVersionText").textContent = updateVersionCopy(status);
-  $("updateCheckBtn").textContent = phase === "checking" ? "확인 중" : "업데이트 확인";
+  $("updateCheckBtn").textContent = phase === "checking" ? t("update.actionChecking") : t("action.checkUpdate");
   $("updateCheckBtn").disabled = busy;
   $("updateInstallBtn").disabled = !status.updateAvailable || busy;
   $("updateInstallBtn").textContent = phase === "downloading" || phase === "installing"
-    ? "설치 중"
-    : "설치 및 재시작";
+    ? t("update.actionInstalling")
+    : t("action.installRestart");
   const progress = updateProgressPercent(status);
   $("updateProgressBar").style.width = `${progress}%`;
 }
 
 function updateStatusCopy(status) {
   const checked = status.checkedAt ? ` · ${formatDateTime(status.checkedAt)}` : "";
-  const message = status.message || "업데이트 확인 대기";
-  if (status.phase === "available") {
-    return `${message}${checked}`;
+  const phase = status.phase || "idle";
+  if (phase === "available") return `${t("update.available", { version: status.availableVersion || "-" })}${checked}`;
+  if (phase === "up-to-date") return `${t("update.latest")}${checked}`;
+  if (phase === "checking") return t("update.checking");
+  if (phase === "downloading") {
+    const percent = Number.isFinite(status.percent) ? Math.round(status.percent) : null;
+    return percent == null ? t("update.downloading") : t("update.downloadingProgress", { percent });
   }
-  if (status.phase === "up-to-date") {
-    return `최신 버전입니다${checked}`;
-  }
-  return `${message}${checked}`;
+  if (phase === "installing") return t("update.installing");
+  if (phase === "restarting") return t("update.restarting");
+  if (phase === "error") return `${t("update.failed")}${status.message ? ` · ${status.message}` : ""}${checked}`;
+  return `${t("update.idle")}${checked}`;
 }
 
 function updateVersionCopy(status) {
-  const current = status.currentVersion ? `현재 v${status.currentVersion}` : "현재 버전 확인 중";
+  const current = status.currentVersion
+    ? t("update.current", { version: status.currentVersion })
+    : t("update.currentUnknown");
   if (status.availableVersion) {
     return `${current} → v${status.availableVersion}`;
   }
@@ -244,18 +285,18 @@ function renderRemoteVerify() {
   badge.className = `remote-verify-badge ${isRemote ? "passed" : "local"}`;
   badge.textContent = isRemote ? "remote" : "local";
   $("remoteVerifyTitle").textContent = isRemote
-    ? "다른 LAN 기기에서 접속 중"
-    : "현재 브라우저는 최종 원격 증거가 아닙니다";
+    ? t("remote.connectedTitle")
+    : t("remote.localTitle");
   $("remoteVerifyCopy").textContent = isRemote
-    ? "검증 JSON을 내려받아 release-assets 폴더에 넣으면 remote readiness 증거로 사용할 수 있습니다."
-    : "지금 파일은 local-only 참고용입니다. 다른 LAN 기기에서 열면 최종 검증 JSON으로 바뀝니다.";
+    ? t("remote.connectedCopy")
+    : t("remote.localCopy");
   $("remoteClientIp").textContent = remote.clientIp || "-";
   $("remoteLoopback").textContent = formatBool(remote.loopback);
   $("remoteSameHostIp").textContent = formatBool(remote.sameHostIp);
   $("remoteEvidenceName").textContent = remoteReportFileName(runtime);
   const button = $("downloadRemoteReportBtn");
   button.disabled = !state.runtime || !state.snapshot || !state.remoteCheck;
-  button.textContent = isRemote ? "검증 JSON" : "Local-only JSON";
+  button.textContent = isRemote ? t("action.verificationJson") : t("remote.localJson");
 }
 
 function renderHeader() {
@@ -270,7 +311,7 @@ function renderHeader() {
   $("runtimeMode").textContent = formatRuntimeMode(runtime);
   $("copyLanUrlBtn").textContent = lanCopyButtonText();
   $("lanHint").textContent = remoteAccessHint(lanUrl, localUrl);
-  $("updatedAt").textContent = `업데이트 ${formatTime(snapshot.timestamp)}`;
+  $("updatedAt").textContent = t("header.updated", { time: formatTime(snapshot.timestamp) });
 }
 
 function renderPortSetup() {
@@ -289,7 +330,7 @@ function renderPortSetup() {
   const summary = $("portSummary");
   if (summary) summary.textContent = runtimePort > 0 ? String(runtimePort) : "auto";
   $("portSetupCopy").textContent = portSetupCopy(config, runtime);
-  $("portSaveBtn").textContent = state.portSaveStatus === "saving" ? "저장 중" : "저장";
+  $("portSaveBtn").textContent = state.portSaveStatus === "saving" ? t("port.saving") : t("action.save");
   $("portSaveBtn").disabled = state.portSaveStatus === "saving";
   $("portSetupStatus").textContent = portSetupStatus(config, runtime);
 }
@@ -300,7 +341,7 @@ function renderProviders() {
   list.innerHTML = "";
 
   if (!providers.length) {
-    list.innerHTML = '<div class="empty">현재 실행 중인 에이전트 또는 LLM 프로세스가 없습니다.</div>';
+    list.innerHTML = `<div class="empty">${escapeHtml(t("providers.empty"))}</div>`;
     return;
   }
 
@@ -314,10 +355,10 @@ function renderProviders() {
           <span class="dot"></span>
           <strong>${escapeHtml(provider.name)}</strong>
         </div>
-        <span class="status-badge ${provider.status}">${provider.status}</span>
+        <span class="status-badge ${provider.status}">${escapeHtml(t(`status.${provider.status}`))}</span>
       </div>
       <div class="provider-metrics">
-        <div class="mini-metric"><span>프로세스</span><strong>${provider.processCount}</strong></div>
+        <div class="mini-metric"><span>${escapeHtml(t("providers.processes"))}</span><strong>${provider.processCount}</strong></div>
         <div class="mini-metric"><span>CPU</span><strong>${provider.cpu.toFixed(1)}%</strong></div>
         <div class="mini-metric"><span>MEM</span><strong>${provider.memory.toFixed(1)}%</strong></div>
       </div>
@@ -442,11 +483,13 @@ function renderQuotas(providerQuotas) {
   const list = $("quotaList");
   const rows = Array.isArray(providerQuotas) ? providerQuotas : [];
   const sourceCount = rows.filter((row) => row.source).length;
-  $("quotaSource").textContent = sourceCount ? `${sourceCount}/3 sources` : "수집 대기";
+  $("quotaSource").textContent = sourceCount
+    ? t("quota.sourceCount", { count: sourceCount })
+    : t("quota.sourceWaiting");
   if (!rows.length) {
     list.innerHTML = `
       <div class="empty">
-        사용량 정보를 찾지 못했습니다. Codex CLI 로그인 상태와 로컬 로그 위치를 확인해 주세요.
+        ${escapeHtml(t("quota.empty"))}
       </div>
     `;
     return;
@@ -460,8 +503,8 @@ function renderQuotas(providerQuotas) {
       return `
         <article class="quota-row provider-quota-row">
           <div class="quota-name">${escapeHtml(row.label)}</div>
-          ${renderQuotaWindow("5시간", fiveHour)}
-          ${renderQuotaWindow("1주", weekly)}
+          ${renderQuotaWindow(t("quota.fiveHour"), fiveHour)}
+          ${renderQuotaWindow(t("quota.week"), weekly)}
           <div class="quota-row-meta">${meta}</div>
         </article>
       `;
@@ -487,18 +530,18 @@ function renderQuotaMeta(usage) {
   const meta = usage?.quotaMeta || {};
   const refreshButton = $("quotaRefreshBtn");
   if (refreshButton) {
-    refreshButton.textContent = state.quotaRefreshStatus === "loading" ? "수집 중" : "사용량 새로고침";
+    refreshButton.textContent = state.quotaRefreshStatus === "loading" ? t("quota.collecting") : t("action.refreshQuota");
     refreshButton.disabled = state.quotaRefreshStatus === "loading";
   }
   if (!element) return;
   if (!meta.observedAt) {
-    element.innerHTML = '<span>사용량 수집 대기</span>';
+    element.innerHTML = `<span>${escapeHtml(t("quota.waiting"))}</span>`;
     return;
   }
   const staleClass = meta.stale ? "stale" : "fresh";
   const staleLabel = meta.stale ? "stale" : "fresh";
   element.innerHTML = `
-    <span>수집 ${formatDateTime(meta.observedAt)}</span>
+    <span>${escapeHtml(t("quota.collected", { time: formatDateTime(meta.observedAt) }))}</span>
     <span>source=${escapeHtml(meta.source || "unknown")}</span>
     <span>${formatAge(meta.ageSeconds)}</span>
     <span class="quota-stale ${staleClass}">${staleLabel}</span>
@@ -510,17 +553,17 @@ function quotaWindowView(quota, unlimited = false) {
   if (!quota) {
     if (unlimited) {
       return {
-        value: "제한 없음",
-        meta: "현재 미적용",
+        value: t("quota.unlimited"),
+        meta: t("quota.notApplied"),
         remaining: 100,
         available: true,
         unlimited: true,
       };
     }
-    return { value: "-", meta: "수집 전", remaining: 0, available: false };
+    return { value: "-", meta: t("quota.notCollected"), remaining: 0, available: false };
   }
   const remaining = clamp(Number(quota.remainingPercent ?? 0), 0, 100);
-  const reset = quota.resetAt ? formatResetTime(quota.resetAt) : "reset unknown";
+  const reset = quota.resetAt ? formatResetTime(quota.resetAt) : t("quota.resetUnknown");
   return {
     value: `${remaining}%`,
     meta: reset,
@@ -531,13 +574,16 @@ function quotaWindowView(quota, unlimited = false) {
 }
 
 function renderQuotaWindow(label, view) {
+  const title = view.unlimited
+    ? `${label} ${t("quota.unlimited")}`
+    : t("quota.remainingTitle", { label, value: view.value });
   return `
     <div class="quota-window ${view.available ? "" : "missing"} ${view.unlimited ? "unlimited" : ""}">
       <div class="quota-window-top">
         <span>${label}</span>
         <strong>${escapeHtml(view.value)}</strong>
       </div>
-      <div class="quota-bar" title="${label} ${view.unlimited ? "제한 없음" : `remaining ${escapeHtml(view.value)}`}">
+      <div class="quota-bar" title="${escapeHtml(title)}">
         <span style="--remaining: ${view.remaining}%"></span>
       </div>
       <small>${escapeHtml(view.meta)}</small>
@@ -549,7 +595,7 @@ function renderTokenProviderFilters(usageItems) {
   const element = $("tokenProviderFilters");
   if (!element) return;
   const providers = [
-    { key: "all", label: "전체" },
+    { key: "all", label: t("tokens.all") },
     { key: "codex", label: "Codex" },
     { key: "claude", label: "Claude" },
     { key: "gemini", label: "Gemini" },
@@ -580,10 +626,10 @@ function renderTokenProviderFilters(usageItems) {
 function renderTokenGrass(usage) {
   const daily = usage?.daily || [];
   const totals = usage?.totals || {};
-  $("todayTokens").textContent = `${formatTokens(totals.todayTokens || 0)} today`;
-  $("weekTokens").textContent = `최근 7일 ${formatTokens(totals.last7DaysTokens || 0)}`;
-  $("monthTokens").textContent = `최근 30일 ${formatTokens(totals.last30DaysTokens || 0)}`;
-  $("observedTokens").textContent = `관측 총량 ${formatTokens(totals.observedTokens || 0)}`;
+  $("todayTokens").textContent = t("tokens.today", { value: formatTokens(totals.todayTokens || 0) });
+  $("weekTokens").textContent = t("tokens.last7", { value: formatTokens(totals.last7DaysTokens || 0) });
+  $("monthTokens").textContent = t("tokens.last30", { value: formatTokens(totals.last30DaysTokens || 0) });
+  $("observedTokens").textContent = t("tokens.observed", { value: formatTokens(totals.observedTokens || 0) });
 
   const grass = $("tokenGrass");
   const previousScrollLeft = grass.scrollLeft;
@@ -595,12 +641,16 @@ function renderTokenGrass(usage) {
     { date: "-", tokens: 0, turns: 0 },
   );
   $("maxDayTokens").textContent =
-    maxDay.tokens > 0 ? `최대 사용일 ${maxDay.date} · ${formatTokens(maxDay.tokens)}` : "최대 사용일 -";
+    maxDay.tokens > 0
+      ? t("tokens.maxDay", { date: maxDay.date, value: formatTokens(maxDay.tokens) })
+      : t("tokens.maxDayNone");
   for (const day of days) {
     const cell = document.createElement("div");
     const intensity = day.tokens / max;
     cell.className = `token-cell${day.future ? " future" : ""}`;
-    cell.title = day.future ? `${day.date} · future` : `${day.date} · ${formatTokens(day.tokens)} · ${day.turns} turns`;
+    cell.title = day.future
+      ? `${day.date} · ${t("tokens.future")}`
+      : `${day.date} · ${formatTokens(day.tokens)} · ${t("tokens.turns", { count: day.turns })}`;
     cell.style.background = tokenColor(intensity);
     grass.appendChild(cell);
   }
@@ -648,13 +698,15 @@ function renderGoalUsage(usage) {
     element.innerHTML = "";
     return;
   }
-  const remaining = goal.remainingTokens == null ? "budget 없음" : `${formatTokens(goal.remainingTokens)} left`;
-  const budget = goal.tokenBudget == null ? "unbounded" : formatTokens(goal.tokenBudget);
+  const remaining = goal.remainingTokens == null
+    ? t("goal.noBudget")
+    : t("goal.left", { value: formatTokens(goal.remainingTokens) });
+  const budget = goal.tokenBudget == null ? t("goal.unbounded") : formatTokens(goal.tokenBudget);
   element.innerHTML = `
     <article class="goal-row">
       <div>
-        <span>현재 goal</span>
-        <strong>${formatTokens(goal.tokensUsed)} used</strong>
+        <span>${escapeHtml(t("goal.current"))}</span>
+        <strong>${escapeHtml(t("goal.used", { value: formatTokens(goal.tokensUsed) }))}</strong>
       </div>
       <div>
         <span>${escapeHtml(goal.status || "active")} · ${budget}</span>
@@ -674,12 +726,12 @@ function renderUsageNotes(usage) {
     return;
   }
   const expanded = state.usageNotesExpanded;
-  const preview = expanded ? `수집 로그 ${notes.length}개` : notes[0];
+  const preview = expanded ? t("notes.collected", { count: notes.length }) : notes[0];
   element.classList.toggle("expanded", expanded);
   element.innerHTML = `
     <div class="usage-notes-summary">
       <span class="usage-notes-preview" title="${escapeHtml(notes[0])}">${escapeHtml(preview)}</span>
-      <button id="usageNotesToggle" type="button" aria-expanded="${expanded}">${expanded ? "로그 접기" : `전체 로그 ${notes.length}개`}</button>
+      <button id="usageNotesToggle" type="button" aria-expanded="${expanded}">${escapeHtml(expanded ? t("notes.collapse") : t("notes.all", { count: notes.length }))}</button>
     </div>
     ${expanded ? `<div class="usage-notes-list">${notes.map((note) => `<span>${escapeHtml(note)}</span>`).join("")}</div>` : ""}
   `;
@@ -693,9 +745,12 @@ function renderThreads(usage) {
   const list = $("threadList");
   const totals = usage?.totals || {};
   const threads = usage?.threads || [];
-  $("threadTotal").textContent = `${formatTokens(totals.threadTotalTokens || 0)} · ${totals.threadCount || 0} threads`;
+  $("threadTotal").textContent = t("threads.summary", {
+    tokens: formatTokens(totals.threadTotalTokens || 0),
+    count: totals.threadCount || 0,
+  });
   if (!threads.length) {
-    list.innerHTML = '<div class="empty">수집 가능한 Codex thread 상태 DB가 아직 없습니다.</div>';
+    list.innerHTML = `<div class="empty">${escapeHtml(t("threads.empty"))}</div>`;
     return;
   }
   list.innerHTML = threads
@@ -723,9 +778,9 @@ function renderUsageLocations() {
   if (!list || !summary) return;
   const found = providers.reduce((sum, provider) => sum + usageLocationFoundCount(provider), 0);
   const configured = providers.reduce((sum, provider) => sum + (provider.configured || []).length, 0);
-  summary.textContent = `${found} found · ${configured} custom`;
+  summary.textContent = t("sources.summary", { found, custom: configured });
   if (!providers.length) {
-    list.innerHTML = '<div class="empty">수집 위치 정보를 불러오는 중입니다.</div>';
+    list.innerHTML = `<div class="empty">${escapeHtml(t("sources.loading"))}</div>`;
     return;
   }
   list.innerHTML = providers.map(renderUsageLocationProvider).join("");
@@ -750,27 +805,27 @@ function renderUsageLocationProvider(provider) {
       <div class="usage-location-top">
         <div>
           <strong>${escapeHtml(provider.label)}</strong>
-          <span>${found} usable paths</span>
+          <span>${escapeHtml(t("sources.usablePaths", { count: found }))}</span>
         </div>
         <button type="button" data-save-usage-paths="${escapeHtml(provider.provider)}">
-          ${status === "saving" ? "저장 중" : "저장"}
+          ${escapeHtml(status === "saving" ? t("port.saving") : t("action.save"))}
         </button>
       </div>
       <div class="usage-location-paths">
-        ${renderUsageLocationEntries("기본 위치", provider.defaults || [])}
-        ${renderUsageLocationEntries("수동 위치", provider.configured || [])}
+        ${renderUsageLocationEntries(t("sources.defaultPaths"), provider.defaults || [])}
+        ${renderUsageLocationEntries(t("sources.customPaths"), provider.configured || [])}
       </div>
-      <label class="usage-path-label" for="usagePathInput-${escapeHtml(provider.provider)}">수동 경로</label>
+      <label class="usage-path-label" for="usagePathInput-${escapeHtml(provider.provider)}">${escapeHtml(t("sources.manualPath"))}</label>
       <textarea
         id="usagePathInput-${escapeHtml(provider.provider)}"
         class="usage-path-input"
         data-provider="${escapeHtml(provider.provider)}"
         spellcheck="false"
-        placeholder="디렉터리 또는 파일 경로를 줄마다 입력하세요. 예: ~/.claude/projects"
+        placeholder="${escapeHtml(t("sources.pathPlaceholder"))}"
       >${escapeHtml(configuredPaths)}</textarea>
       <div class="usage-location-command">
         <code>${escapeHtml(provider.terminalCommand || "")}</code>
-        <button type="button" data-copy-command="${escapeHtml(provider.provider)}">명령 복사</button>
+        <button type="button" data-copy-command="${escapeHtml(provider.provider)}">${escapeHtml(t("action.copyCommand"))}</button>
       </div>
       <div class="usage-location-status">${usagePathStatusText(provider.provider)}</div>
     </article>
@@ -783,7 +838,7 @@ function renderUsageLocationEntries(label, entries) {
     return `
       <div class="usage-location-entry-group">
         <span>${escapeHtml(label)}</span>
-        <div class="usage-location-entry muted">없음</div>
+        <div class="usage-location-entry muted">${escapeHtml(t("sources.none"))}</div>
       </div>
     `;
   }
@@ -794,9 +849,9 @@ function renderUsageLocationEntries(label, entries) {
         .map(
           (entry) => `
             <div class="usage-location-entry ${entry.exists ? "exists" : "missing"}" title="${escapeHtml(entry.expandedPath || entry.path)}">
-              <b>${entry.exists ? "found" : "missing"}</b>
+              <b>${escapeHtml(entry.exists ? t("sources.found") : t("sources.missing"))}</b>
               <code>${escapeHtml(entry.path)}</code>
-              <em>${Number(entry.fileCount || 0)} files</em>
+              <em>${escapeHtml(t("sources.files", { count: Number(entry.fileCount || 0) }))}</em>
             </div>
           `,
         )
@@ -813,10 +868,10 @@ function usageLocationFoundCount(provider) {
 
 function usagePathStatusText(provider) {
   const status = state.usagePathSaveStatus[provider] || "idle";
-  if (status === "saved") return "저장했습니다. 로그 재스캔을 누르면 새 위치가 반영됩니다.";
-  if (status === "error") return "저장에 실패했습니다.";
-  if (status === "copied") return "터미널 명령을 복사했습니다.";
-  return "위치를 모르면 위 명령을 터미널에서 실행한 뒤 나온 경로를 붙여 넣으세요.";
+  if (status === "saved") return t("sources.saved");
+  if (status === "error") return t("sources.saveFailed");
+  if (status === "copied") return t("sources.copied");
+  return t("sources.help");
 }
 
 async function saveUsagePaths(provider) {
@@ -939,7 +994,7 @@ function renderTrend() {
   if (points.length < 2) {
     ctx.fillStyle = "#9aa5b1";
     ctx.font = "28px Inter, sans-serif";
-    ctx.fillText("히스토리를 쌓는 중", padding, height / 2);
+    ctx.fillText(t("trend.loading"), padding, height / 2);
     return;
   }
 
@@ -1003,9 +1058,9 @@ function renderProviderHistory() {
   const list = $("providerHistoryList");
   const activeHistory = activeProviderHistory(state.providerHistory);
   const rows = summarizeProviderHistory(activeHistory);
-  $("providerHistoryTotal").textContent = `${activeHistory.length} active samples`;
+  $("providerHistoryTotal").textContent = t("history.activeSamples", { count: activeHistory.length });
   if (!rows.length) {
-    list.innerHTML = '<div class="empty">실행 중인 에이전트 또는 LLM 로그를 쌓는 중입니다.</div>';
+    list.innerHTML = `<div class="empty">${escapeHtml(t("history.empty"))}</div>`;
     return;
   }
   list.innerHTML = rows
@@ -1016,12 +1071,12 @@ function renderProviderHistory() {
         <article class="provider-history-row">
           <div class="provider-history-main">
             <strong>${escapeHtml(row.name)}</strong>
-            <span>${row.samples} samples · ${formatTime(row.lastTs)}</span>
+            <span>${escapeHtml(t("history.samples", { count: row.samples }))} · ${formatTime(row.lastTs)}</span>
           </div>
           <div class="provider-history-metrics">
-            <span class="status-badge ${status}">${status}</span>
-            <span>avg CPU <b>${row.avgCpu.toFixed(1)}%</b></span>
-            <span>max proc <b>${row.maxProcesses}</b></span>
+            <span class="status-badge ${status}">${escapeHtml(t(`status.${status}`))}</span>
+            <span>${escapeHtml(t("history.averageCpu"))} <b>${row.avgCpu.toFixed(1)}%</b></span>
+            <span>${escapeHtml(t("history.maxProcesses"))} <b>${row.maxProcesses}</b></span>
           </div>
         </article>
       `;
@@ -1074,7 +1129,7 @@ function summarizeProviderHistory(history) {
 function renderEvents() {
   const list = $("eventList");
   if (!state.events.length) {
-    list.innerHTML = '<div class="empty">아직 상태 변경 로그가 없습니다.</div>';
+    list.innerHTML = `<div class="empty">${escapeHtml(t("events.empty"))}</div>`;
     return;
   }
   list.innerHTML = state.events
@@ -1090,7 +1145,7 @@ function renderEvents() {
 }
 
 function formatTime(ts) {
-  return new Intl.DateTimeFormat("ko-KR", {
+  return new Intl.DateTimeFormat(I18N.intlLocale(state.locale), {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -1102,12 +1157,12 @@ function formatResetTime(ts) {
   const now = new Date();
   const sameDay = date.toDateString() === now.toDateString();
   if (sameDay) {
-    return new Intl.DateTimeFormat("ko-KR", {
+    return new Intl.DateTimeFormat(I18N.intlLocale(state.locale), {
       hour: "2-digit",
       minute: "2-digit",
     }).format(date);
   }
-  return new Intl.DateTimeFormat("ko-KR", {
+  return new Intl.DateTimeFormat(I18N.intlLocale(state.locale), {
     month: "short",
     day: "numeric",
   }).format(date);
@@ -1115,7 +1170,7 @@ function formatResetTime(ts) {
 
 function formatDateTime(ts) {
   if (!ts) return "-";
-  return new Intl.DateTimeFormat("ko-KR", {
+  return new Intl.DateTimeFormat(I18N.intlLocale(state.locale), {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -1125,10 +1180,11 @@ function formatDateTime(ts) {
 
 function formatAge(seconds) {
   const value = Number(seconds || 0);
-  if (value < 60) return `${Math.round(value)}초 전`;
-  if (value < 3600) return `${Math.round(value / 60)}분 전`;
-  if (value < 86400) return `${Math.round(value / 3600)}시간 전`;
-  return `${Math.round(value / 86400)}일 전`;
+  const formatter = new Intl.RelativeTimeFormat(I18N.intlLocale(state.locale), { numeric: "always" });
+  if (value < 60) return formatter.format(-Math.round(value), "second");
+  if (value < 3600) return formatter.format(-Math.round(value / 60), "minute");
+  if (value < 86400) return formatter.format(-Math.round(value / 3600), "hour");
+  return formatter.format(-Math.round(value / 86400), "day");
 }
 
 function shortPath(path) {
@@ -1173,9 +1229,9 @@ function remoteReportFileName(runtime = state.runtime || {}) {
 
 function remoteAccessHint(lanUrl, localUrl) {
   if (!lanUrl || lanUrl === localUrl || lanUrl.includes("127.0.0.1")) {
-    return "LAN IP를 찾지 못했습니다. 같은 네트워크와 방화벽 설정을 확인하세요.";
+    return t("lan.missing");
   }
-  return "같은 네트워크의 다른 기기에서 LAN URL을 열면 remote 검증으로 바뀝니다.";
+  return t("lan.remoteHint");
 }
 
 function buildBrowserRemoteReport() {
@@ -1281,27 +1337,28 @@ function portSetupCopy(config = {}, runtime = {}) {
   const current = runtime.port || config.effectivePort || portPlaceholder();
   const configured = config.configuredPort || config.envPort;
   if (config.envPort) {
-    return `현재 실행 포트는 ${current}입니다. AGENTWATCH_PORT=${config.envPort} 환경변수가 설정 파일보다 우선합니다.`;
+    return t("port.currentEnv", { current, env: config.envPort });
   }
   if (configured && configured !== current) {
-    return `설정 포트는 ${configured}, 현재 실행 포트는 ${current}입니다. 포트가 사용 중이면 자동으로 대체 포트를 사용합니다.`;
+    return t("port.currentMismatch", { configured, current });
   }
-  return `현재 실행 포트는 ${current}입니다. 저장하면 다음 실행부터 이 포트를 우선 사용합니다.`;
+  return t("port.current", { current });
 }
 
 function portSetupStatus(config = {}, runtime = {}) {
   if (state.portSaveStatus === "saved") {
     const current = runtime.port || config.effectivePort || portPlaceholder();
+    const path = config.configPath || t("port.configFile");
     if (config.configuredPort === current) {
-      return `${config.configPath || "설정 파일"}에 저장했습니다.`;
+      return t("port.saved", { path });
     }
-    return `${config.configPath || "설정 파일"}에 저장했습니다. 다음 실행부터 적용됩니다.`;
+    return t("port.savedNext", { path });
   }
   if (state.portSaveStatus === "error") {
-    return "포트 저장에 실패했습니다.";
+    return t("port.error");
   }
   if (config.firstRun === true) {
-    return "입력값을 비우면 현재 실행 포트가 저장됩니다.";
+    return t("port.firstRun");
   }
   return "";
 }
@@ -1312,7 +1369,7 @@ async function savePortConfig() {
   const port = Number(raw);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     state.portSaveStatus = "error";
-    $("portSetupStatus").textContent = "1부터 65535 사이의 포트를 입력하세요.";
+    $("portSetupStatus").textContent = t("port.invalid");
     return;
   }
   state.portSaveStatus = "saving";
@@ -1368,11 +1425,11 @@ async function waitForUsageRefresh(previousCollectedAt) {
     }
     if (payload.refreshing !== true && collectedAt >= previousCollectedAt) return;
   }
-  throw new Error("로그 재스캔 시간이 초과되었습니다.");
+  throw new Error(t("usage.scanTimeout"));
 }
 
 async function checkForUpdate() {
-  state.updateStatus = { ...(state.updateStatus || {}), phase: "checking", message: "업데이트 확인 중" };
+  state.updateStatus = { ...(state.updateStatus || {}), phase: "checking", message: t("update.checking") };
   renderUpdatePanel();
   const response = await fetch("/api/update/check", { method: "POST" });
   const payload = await response.json();
@@ -1387,7 +1444,7 @@ async function installUpdate() {
   state.updateStatus = {
     ...(state.updateStatus || {}),
     phase: "downloading",
-    message: "업데이트 다운로드 준비 중",
+    message: t("update.downloading"),
     percent: 0,
   };
   renderUpdatePanel();
@@ -1425,9 +1482,9 @@ async function copyText(value) {
 }
 
 function lanCopyButtonText() {
-  if (state.lanCopyStatus === "copied") return "복사됨";
-  if (state.lanCopyStatus === "selected") return "선택됨";
-  return "복사";
+  if (state.lanCopyStatus === "copied") return t("copy.copied");
+  if (state.lanCopyStatus === "selected") return t("copy.selected");
+  return t("action.copy");
 }
 
 function selectLanUrl() {
@@ -1461,6 +1518,10 @@ function roundRect(ctx, x, y, width, height, radius) {
 
 $("refreshBtn").addEventListener("click", () => {
   Promise.all([refreshLive(), refreshActivity()]).catch(showError);
+});
+
+document.querySelectorAll("[data-locale]").forEach((button) => {
+  button.addEventListener("click", () => setLocale(button.dataset.locale));
 });
 
 $("downloadRemoteReportBtn").addEventListener("click", downloadRemoteReport);
@@ -1503,8 +1564,9 @@ function showError(error) {
   console.error(error);
   const status = $("updateStatusText");
   if (status) {
-    status.textContent = `연결 오류: ${error.message}`;
+    status.textContent = t("errors.connection", { message: error.message });
   }
 }
 
+applyStaticTranslations();
 refresh().catch(showError).finally(startPolling);

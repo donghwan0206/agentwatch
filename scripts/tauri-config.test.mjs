@@ -87,7 +87,7 @@ assert.match(serverRs, /"monitoringService"/, "runtime must expose monitoring se
 assert.match(serverRs, /"desktop-embedded"/, "desktop runtime must identify the embedded monitor service");
 assert.match(serverRs, /"closeKeepsRunning"/, "runtime must report close-to-tray monitoring behavior");
 assert.match(serverRs, /"quitStopsMonitoring"/, "runtime must report quit stops monitoring behavior");
-assert.match(indexHtml, /온에어 업데이트/, "dashboard update panel missing");
+assert.match(indexHtml, /data-i18n="update\.title"/, "dashboard update panel missing");
 assert.match(appJs, /\/api\/update\/check/, "dashboard update check action missing");
 assert.match(appJs, /\/api\/update\/install/, "dashboard update install action missing");
 assert.match(appJs, /embedded monitor/, "dashboard runtime text must identify embedded monitoring");

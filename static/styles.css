@@ -168,10 +168,71 @@ h2 {
 }
 
 .header-actions {
+  align-items: flex-start;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
+}
+
+.language-switcher {
+  align-items: center;
+  background: rgba(21, 25, 31, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  gap: 2px;
+  min-height: 40px;
+  padding: 3px;
+}
+
+.language-switcher button {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  min-height: 32px;
+  padding: 0 7px;
+}
+
+.language-switcher button:hover {
+  color: var(--text);
+}
+
+.language-switcher button.active {
+  background: rgba(37, 194, 154, 0.14);
+  border-color: rgba(37, 194, 154, 0.4);
+  color: #65e4c2;
+}
+
+.icon-button {
+  align-items: center;
+  background: rgba(34, 42, 51, 0.96);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--soft);
+  display: inline-flex;
+  flex: 0 0 40px;
+  height: 40px;
+  justify-content: center;
+  text-decoration: none;
+  width: 40px;
+}
+
+.icon-button:hover {
+  border-color: #46515f;
+  color: var(--text);
+}
+
+.icon-button svg {
+  fill: none;
+  height: 20px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  width: 20px;
 }
 
 .top-menu {
@@ -1347,10 +1408,17 @@ canvas {
     grid-template-columns: 1fr;
   }
 
-  .topbar-tools,
-  .header-actions {
+  .topbar-tools {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .header-actions {
+    display: flex;
+  }
+
+  .header-actions .top-menu {
+    flex: 1 1 100%;
   }
 
   .top-menu-body {
@@ -1366,6 +1434,10 @@ canvas {
 
   .quota-row {
     grid-template-columns: 1fr;
+  }
+
+  .quota-row-meta {
+    grid-column: 1;
   }
 
   .thread-row {

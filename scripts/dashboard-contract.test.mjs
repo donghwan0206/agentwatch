@@ -3,13 +3,14 @@ import { readFileSync } from "node:fs";
 
 const html = readFileSync("static/index.html", "utf8");
 const js = readFileSync("static/app.js", "utf8");
+const i18n = readFileSync("static/i18n.js", "utf8");
 const css = readFileSync("static/styles.css", "utf8");
 const server = readFileSync("src-tauri/src/server.rs", "utf8");
 const monitorCollector = readFileSync("src-tauri/src/monitor.rs", "utf8");
 const usageCollector = readFileSync("src-tauri/src/usage.rs", "utf8");
 
 for (const marker of [
-  "브라우저 원격 검증",
+  "remote.title",
   "copyLanUrlBtn",
   "lanHint",
   "downloadRemoteReportBtn",
@@ -21,20 +22,27 @@ for (const marker of [
   "remoteEvidenceName",
   "topbar-tools",
   "header-actions",
+  "languageSwitcher",
+  "github-button",
+  "data-locale=\"en\"",
+  "data-locale=\"ko\"",
+  "data-locale=\"ja\"",
+  "data-locale=\"zh\"",
+  "https://github.com/donghwan0206/agentwatch",
   "top-menu",
   "portSummary",
   "observedTokens",
   "maxDayTokens",
   "tokenProviderFilters",
   "thread-details",
-  "일별 토큰 잔디",
-  "남은 사용량",
+  "tokens.title",
+  "quota.title",
   "portSetupPanel",
   "portInput",
-  "대시보드 포트 설정",
+  "port.title",
   "usageLocationPanel",
   "usageLocationList",
-  "토큰 로그 위치",
+  "sources.title",
 ]) {
   assert.match(html, new RegExp(escapeRegExp(marker)), `dashboard HTML missing ${marker}`);
 }
@@ -102,25 +110,18 @@ for (const marker of [
   "selectedTokenProvider",
   "usageNotesExpanded",
   "usageNotesToggle",
-  "전체 로그",
-  "5시간",
-  "1주",
-  "제한 없음",
-  "현재 미적용",
+  "applyStaticTranslations",
+  "renderLocaleControls",
+  "setLocale",
   "observedTokens",
   "maxDayTokens",
   "observedTokens || 0",
-  "Codex CLI 로그인 상태",
   "remote-client-verification-${platform}.json",
   'verifier: "browser-dashboard"',
   'result: isRemote ? "passed" : "local-only"',
   "remoteCheckEndpoint: \"passed\"",
   "remoteClient: remote.remoteClient === true",
   "sameHost: !isRemote",
-  "지금 파일은 local-only 참고용입니다",
-  "최종 검증 JSON으로 바뀝니다",
-  "remote 검증으로 바뀝니다",
-  "선택됨",
   "schedulePoll",
   "refreshLive",
   "refreshActivity",
@@ -135,6 +136,23 @@ for (const marker of [
   "mergeProviderHistoryPoints",
 ]) {
   assert.match(js, new RegExp(escapeRegExp(marker)), `dashboard JS missing ${marker}`);
+}
+
+for (const marker of [
+  "agentwatch.locale",
+  "detectLocale",
+  "initialLocale",
+  "intlLocale",
+  "Remaining usage",
+  "남은 사용량",
+  "残りの使用量",
+  "剩余用量",
+  "No limit",
+  "제한 없음",
+  "上限なし",
+  "无限制",
+]) {
+  assert.match(i18n, new RegExp(escapeRegExp(marker)), `dashboard i18n missing ${marker}`);
 }
 
 assert.doesNotMatch(
@@ -235,6 +253,9 @@ assert.doesNotMatch(
 for (const marker of [
   ".topbar-tools",
   ".header-actions",
+  ".language-switcher",
+  ".language-switcher button.active",
+  ".icon-button",
   ".top-menu",
   ".top-menu-body",
   ".top-menu.attention",

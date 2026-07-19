@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -15,7 +15,7 @@
           </div>
           <div>
             <h1>AgentWatch</h1>
-            <p id="hostLine">에이전트 머신 연결 대기 중</p>
+            <p id="hostLine" data-i18n="host.waiting">Waiting for the agent machine</p>
           </div>
         </div>
 
@@ -24,26 +24,55 @@
             <span class="label">LAN URL</span>
             <div class="lan-row">
               <strong id="lanUrl">-</strong>
-              <button id="copyLanUrlBtn" class="copy-url-btn" type="button">복사</button>
+              <button id="copyLanUrlBtn" class="copy-url-btn" type="button" data-i18n="action.copy">Copy</button>
             </div>
             <span id="runtimeMode" class="runtime-mode">-</span>
-            <span id="lanHint" class="lan-hint">같은 네트워크의 다른 기기에서 LAN URL을 여세요.</span>
+            <span id="lanHint" class="lan-hint" data-i18n="lan.defaultHint">Open the LAN URL from another device on the same network.</span>
           </div>
 
           <div class="header-actions">
+            <nav
+              id="languageSwitcher"
+              class="language-switcher"
+              role="group"
+              aria-label="Dashboard language"
+              data-i18n-aria-label="language.selector"
+            >
+              <button type="button" data-locale="en" aria-pressed="false" title="English">EN</button>
+              <button type="button" data-locale="ko" aria-pressed="false" title="한국어">한국어</button>
+              <button type="button" data-locale="ja" aria-pressed="false" title="日本語">日本語</button>
+              <button type="button" data-locale="zh" aria-pressed="false" title="简体中文">中文</button>
+            </nav>
+
+            <a
+              class="icon-button github-button"
+              href="https://github.com/donghwan0206/agentwatch"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Open AgentWatch on GitHub"
+              title="Open AgentWatch on GitHub"
+              data-i18n-aria-label="github.open"
+              data-i18n-title="github.open"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3.3-.4 6.8-1.6 6.8-7A5.4 5.4 0 0 0 19.4 4 5 5 0 0 0 19.3.5S18.2.1 15 1.8a13.4 13.4 0 0 0-7 0C4.8.1 3.7.5 3.7.5A5 5 0 0 0 3.6 4a5.4 5.4 0 0 0-1.4 3.7c0 5.3 3.5 6.5 6.8 7A4.8 4.8 0 0 0 8 18v4" />
+                <path d="M9 18c-4.5 2-5-2-7-2" />
+              </svg>
+            </a>
+
             <details id="portSetupPanel" class="top-menu port-menu">
               <summary>
-                <span>포트</span>
+                <span data-i18n="menu.port">Port</span>
                 <strong id="portSummary">-</strong>
               </summary>
               <div class="top-menu-body">
                 <p class="eyebrow">Setup</p>
-                <h2>대시보드 포트 설정</h2>
-                <p id="portSetupCopy">처음 실행한 포트를 저장하면 다음 실행부터 같은 포트를 우선 사용합니다.</p>
+                <h2 data-i18n="port.title">Dashboard port</h2>
+                <p id="portSetupCopy" data-i18n="port.intro">Save the current port to prefer it the next time AgentWatch starts.</p>
                 <div class="port-setup-form">
-                  <label for="portInput">포트</label>
+                  <label for="portInput" data-i18n="port.label">Port</label>
                   <input id="portInput" type="number" min="1" max="65535" inputmode="numeric" />
-                  <button id="portSaveBtn" type="button">저장</button>
+                  <button id="portSaveBtn" type="button" data-i18n="action.save">Save</button>
                 </div>
                 <p id="portSetupStatus" class="port-setup-status"></p>
                 <p class="local-url">Local <span id="localUrl">-</span></p>
@@ -52,38 +81,38 @@
 
             <details class="top-menu update-menu">
               <summary>
-                <span>업데이트</span>
+                <span data-i18n="menu.update">Update</span>
                 <strong id="updateVersionText">-</strong>
               </summary>
               <div class="top-menu-body">
                 <p class="eyebrow">Update</p>
-                <h2>온에어 업데이트</h2>
-                <p id="updateStatusText">업데이트 상태 확인 중</p>
+                <h2 data-i18n="update.title">Over-the-air update</h2>
+                <p id="updateStatusText" data-i18n="update.checkingStatus">Checking update status</p>
                 <div class="update-progress" aria-hidden="true">
                   <span id="updateProgressBar"></span>
                 </div>
                 <div class="update-actions">
-                  <button id="updateCheckBtn" type="button">업데이트 확인</button>
-                  <button id="updateInstallBtn" type="button" disabled>설치 및 재시작</button>
+                  <button id="updateCheckBtn" type="button" data-i18n="action.checkUpdate">Check for updates</button>
+                  <button id="updateInstallBtn" type="button" disabled data-i18n="action.installRestart">Install and restart</button>
                 </div>
               </div>
             </details>
 
             <details class="top-menu remote-menu">
               <summary>
-                <span>원격</span>
+                <span data-i18n="menu.remote">Remote</span>
                 <strong id="remoteVerifyBadge" class="remote-verify-badge pending">checking</strong>
               </summary>
               <div class="top-menu-body">
                 <div class="panel-head compact-head">
                   <div>
                     <p class="eyebrow">Remote Verify</p>
-                    <h2>브라우저 원격 검증</h2>
+                    <h2 data-i18n="remote.title">Remote browser verification</h2>
                   </div>
-                  <button id="downloadRemoteReportBtn" type="button" disabled>검증 JSON</button>
+                  <button id="downloadRemoteReportBtn" type="button" disabled data-i18n="action.verificationJson">Verification JSON</button>
                 </div>
-                <strong id="remoteVerifyTitle">원격 접속 확인 중</strong>
-                <p id="remoteVerifyCopy">이 브라우저가 에이전트 머신과 다른 LAN 기기인지 확인하고 있습니다.</p>
+                <strong id="remoteVerifyTitle" data-i18n="remote.checkingTitle">Checking remote access</strong>
+                <p id="remoteVerifyCopy" data-i18n="remote.checkingCopy">Checking whether this browser is on a different LAN device from the agent machine.</p>
                 <dl class="remote-verify-facts">
                   <div>
                     <dt>Client IP</dt>
@@ -113,11 +142,11 @@
           <div class="panel-head">
             <div>
               <p class="eyebrow">Quota</p>
-              <h2>남은 사용량</h2>
+              <h2 data-i18n="quota.title">Remaining usage</h2>
             </div>
             <div class="quota-actions">
               <span id="quotaSource">-</span>
-              <button id="quotaRefreshBtn" type="button">사용량 새로고침</button>
+              <button id="quotaRefreshBtn" type="button" data-i18n="action.refreshQuota">Refresh usage</button>
             </div>
           </div>
           <div id="quotaList" class="quota-list"></div>
@@ -129,21 +158,21 @@
           <div class="panel-head">
             <div>
               <p class="eyebrow">Tokens</p>
-              <h2>일별 토큰 잔디</h2>
+              <h2 data-i18n="tokens.title">Daily token history</h2>
             </div>
             <strong id="todayTokens">0</strong>
           </div>
-          <div id="tokenProviderFilters" class="token-provider-filters" aria-label="token provider filter"></div>
+          <div id="tokenProviderFilters" class="token-provider-filters" aria-label="Token provider filter" data-i18n-aria-label="tokens.filterAria"></div>
           <div id="tokenGrassViewport" class="token-grass-viewport">
-            <div id="tokenGrass" class="token-grass" aria-label="daily token usage"></div>
+            <div id="tokenGrass" class="token-grass" aria-label="Daily token usage" data-i18n-aria-label="tokens.grassAria"></div>
           </div>
           <div class="token-summary">
-            <span id="weekTokens">최근 7일 0</span>
-            <span id="monthTokens">최근 30일 0</span>
+            <span id="weekTokens" data-i18n="tokens.last7Initial">Last 7 days 0</span>
+            <span id="monthTokens" data-i18n="tokens.last30Initial">Last 30 days 0</span>
           </div>
           <div class="token-stats">
-            <span id="observedTokens">관측 총량 0</span>
-            <span id="maxDayTokens">최대 사용일 -</span>
+            <span id="observedTokens" data-i18n="tokens.observedInitial">Observed total 0</span>
+            <span id="maxDayTokens" data-i18n="tokens.maxDayInitial">Peak day -</span>
           </div>
           <div id="usageNotes" class="usage-notes"></div>
         </section>
@@ -153,9 +182,9 @@
         <summary class="usage-location-summary">
           <div>
             <p class="eyebrow">Sources</p>
-            <h2>토큰 로그 위치</h2>
+            <h2 data-i18n="sources.title">Token log locations</h2>
           </div>
-          <span id="usageLocationSummary">기본 위치 확인 중</span>
+          <span id="usageLocationSummary" data-i18n="sources.checking">Checking default locations</span>
         </summary>
         <div id="usageLocationList" class="usage-location-list"></div>
       </details>
@@ -165,7 +194,7 @@
           <div class="panel-head">
             <div>
               <p class="eyebrow">Providers</p>
-              <h2>실행 중인 에이전트</h2>
+              <h2 data-i18n="providers.title">Running agents</h2>
             </div>
             <span id="updatedAt">-</span>
           </div>
@@ -176,18 +205,18 @@
           <div class="panel-head">
             <div>
               <p class="eyebrow">Activity</p>
-              <h2>최근 3시간</h2>
+              <h2 data-i18n="activity.title">Last 3 hours</h2>
             </div>
-            <button id="refreshBtn" type="button">새로고침</button>
+            <button id="refreshBtn" type="button" data-i18n="action.refresh">Refresh</button>
           </div>
-          <canvas id="trendCanvas" width="900" height="260" aria-label="activity trend"></canvas>
+          <canvas id="trendCanvas" width="900" height="260" aria-label="Activity trend" data-i18n-aria-label="activity.trendAria"></canvas>
         </section>
 
         <details class="panel thread-panel thread-details">
           <summary class="thread-summary">
             <div>
               <p class="eyebrow">Threads</p>
-              <h2>최근 Codex 스레드 토큰</h2>
+              <h2 data-i18n="threads.title">Recent Codex thread tokens</h2>
             </div>
             <span id="threadTotal">-</span>
           </summary>
@@ -198,17 +227,17 @@
           <div class="panel-head">
             <div>
               <p class="eyebrow">Heatmap</p>
-              <h2>스냅샷 밀도</h2>
+              <h2 data-i18n="heatmap.title">Snapshot density</h2>
             </div>
           </div>
-          <div id="heatmap" class="heatmap" aria-label="snapshot heatmap"></div>
+          <div id="heatmap" class="heatmap" aria-label="Snapshot heatmap" data-i18n-aria-label="heatmap.aria"></div>
         </section>
 
         <section class="panel provider-history-panel">
           <div class="panel-head">
             <div>
               <p class="eyebrow">Provider Logs</p>
-              <h2>Provider별 최근 로그</h2>
+              <h2 data-i18n="providerLogs.title">Recent logs by provider</h2>
             </div>
             <span id="providerHistoryTotal">-</span>
           </div>
@@ -219,13 +248,14 @@
           <div class="panel-head">
             <div>
               <p class="eyebrow">Log</p>
-              <h2>상태 변경 로그</h2>
+              <h2 data-i18n="events.title">Status change log</h2>
             </div>
           </div>
           <div id="eventList" class="event-list"></div>
         </section>
       </section>
     </main>
+    <script src="/i18n.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>

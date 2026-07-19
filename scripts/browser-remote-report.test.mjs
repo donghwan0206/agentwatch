@@ -3,17 +3,26 @@ import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
 const appJs = readFileSync("static/app.js", "utf8");
+const i18nJs = readFileSync("static/i18n.js", "utf8");
 const script = appJs.slice(0, appJs.indexOf('$("refreshBtn")'));
 
 const context = {
   console,
+  localStorage: {
+    getItem: () => null,
+    setItem: () => {},
+  },
   location: { origin: "http://192.168.50.93:8765" },
   navigator: {
+    language: "en-US",
+    languages: ["en-US"],
     platform: "BrowserTest",
     userAgent: "AgentWatchBrowserTest/1.0",
   },
 };
+context.window = context;
 vm.createContext(context);
+vm.runInContext(i18nJs, context);
 vm.runInContext(script, context);
 
 vm.runInContext(`
