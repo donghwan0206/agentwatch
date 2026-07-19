@@ -8,6 +8,7 @@ const css = readFileSync("static/styles.css", "utf8");
 const server = readFileSync("src-tauri/src/server.rs", "utf8");
 const monitorCollector = readFileSync("src-tauri/src/monitor.rs", "utf8");
 const usageCollector = readFileSync("src-tauri/src/usage.rs", "utf8");
+const trayVerifier = readFileSync("scripts/verify-tray.mjs", "utf8");
 
 for (const marker of [
   "remote.title",
@@ -153,6 +154,16 @@ for (const marker of [
   "无限制",
 ]) {
   assert.match(i18n, new RegExp(escapeRegExp(marker)), `dashboard i18n missing ${marker}`);
+}
+
+for (const marker of [
+  'data-i18n="tokens.title"',
+  'data-i18n="threads.title"',
+  'data-i18n="quota.title"',
+  'data-i18n="providerLogs.title"',
+  'data-i18n="remote.title"',
+]) {
+  assert.match(trayVerifier, new RegExp(escapeRegExp(marker)), `tray verifier missing locale-neutral marker ${marker}`);
 }
 
 assert.doesNotMatch(

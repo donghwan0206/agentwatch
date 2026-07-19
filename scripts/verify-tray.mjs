@@ -384,13 +384,13 @@ function validateProviderHistoryContract(payload) {
 }
 
 function validateUsageContracts(dashboardHtml, appJs, stylesCss, payload) {
-  assert(dashboardHtml.includes("일별 토큰 잔디"), "dashboard HTML missing token grass marker");
-  assert(dashboardHtml.includes("최근 Codex 스레드 토큰"), "dashboard HTML missing Codex thread token marker");
-  assert(dashboardHtml.includes("남은 사용량"), "dashboard HTML missing quota marker");
+  assert(dashboardHtml.includes('data-i18n="tokens.title"'), "dashboard HTML missing token grass marker");
+  assert(dashboardHtml.includes('data-i18n="threads.title"'), "dashboard HTML missing Codex thread token marker");
+  assert(dashboardHtml.includes('data-i18n="quota.title"'), "dashboard HTML missing quota marker");
   assert(dashboardHtml.includes("observedTokens"), "dashboard HTML missing observed token total");
   assert(dashboardHtml.includes("maxDayTokens"), "dashboard HTML missing max day token marker");
-  assert(dashboardHtml.includes("Provider별 최근 로그"), "dashboard HTML missing provider history marker");
-  assert(dashboardHtml.includes("브라우저 원격 검증"), "dashboard HTML missing browser remote verification marker");
+  assert(dashboardHtml.includes('data-i18n="providerLogs.title"'), "dashboard HTML missing provider history marker");
+  assert(dashboardHtml.includes('data-i18n="remote.title"'), "dashboard HTML missing browser remote verification marker");
   assert(appJs.includes("/api/usage?days=366"), "dashboard JS missing usage API usage");
   assert(appJs.includes("/api/provider-history?minutes=180"), "dashboard JS missing provider history API usage");
   assert(appJs.includes("/api/remote-check"), "dashboard JS missing remote-check API usage");
