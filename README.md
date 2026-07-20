@@ -1,320 +1,268 @@
 # AgentWatch
 
-AgentWatch is a small LAN dashboard for watching local LLM and coding-agent processes from another machine on the same network.
+AgentWatch is a local-first desktop monitor for LLM and coding agents. Run it on the machine where your agents are working, then open its dashboard from any browser on the same local network.
 
-It is intentionally local-first:
+The desktop app contains everything required for normal use:
 
-- Runs on the machine that hosts Codex, Claude Code, Gemini CLI, ChatGPT, OpenCode, OpenClaw, Hermes, Aider, Goose, Cursor Agent, Qwen Code, Ollama, LM Studio, or llama.cpp.
-- Exposes a browser dashboard on `0.0.0.0`, so another LAN device can open `http://<agent-machine-ip>:<selected-port>`.
-- Logs process snapshots and status changes to SQLite.
-- Logs active provider-level snapshots, including status, process count, CPU, and memory, for later timeline inspection.
-- Shows Codex remaining quota when Codex local rate-limit logs are available.
-- Shows a GitHub-style daily token activity grid from local Codex token-usage events.
-- Reads process metadata only. It does not read prompts, replies, source files, terminal buffers, or project contents.
+- A Rust monitoring service that runs in the background.
+- A tray or menu-bar app for opening the dashboard, checking updates, and quitting.
+- A browser dashboard served over the local network.
+- SQLite storage for activity history and normalized token usage.
 
-## Desktop Tray App
+Closing the dashboard does not stop monitoring. AgentWatch continues running in the tray until you choose **Quit**.
 
-The primary end-user runtime is the desktop tray app. Install and run it on the machine that hosts the agents. The app starts the Rust monitor server inside the desktop app process, serves the same browser dashboard over LAN, and stays alive in the tray/menu bar after the dashboard window is closed.
+## Features
 
-- `sysinfo` reads local processes without shelling out to `ps`.
-- `axum` runs as the embedded background monitor inside the desktop app, binds `0.0.0.0`, uses `8765` by default, and falls back through `8799` if needed.
-- Activity snapshots and status changes are persisted to SQLite.
-- Closing the dashboard window hides it and keeps monitoring running.
-- Choosing Quit from the tray/menu-bar icon exits the desktop app and stops the embedded monitor server with it.
-- Other machines on the same LAN open `http://<agent-machine-ip>:<selected-port>` in a normal browser.
+- Shows only agents and local model runtimes that are currently detected.
+- Tracks process count, CPU, memory, recent activity, and status changes.
+- Displays Codex remaining usage when a supported quota source is available.
+- Builds a GitHub-style daily token history from local Codex, Claude, and Gemini logs.
+- Filters token history by all providers, Codex, Claude, or Gemini.
+- Stores collected history locally so it remains available after app upgrades.
+- Supports English, Korean, Japanese, and Simplified Chinese. The dashboard initially follows the viewer browser's language.
+- Supports over-the-air update checks from the dashboard and tray menu.
+- Lets you configure the dashboard port and custom token-log locations.
 
-For normal installs, download the desktop release artifact for your OS. On Windows, use `AgentWatch_<version>_x64-setup.exe`; do not install the service-only helper unless you intentionally want a headless deployment without a tray icon.
+AgentWatch detects OpenAI Codex, Claude Code, Gemini CLI, ChatGPT, OpenCode, OpenClaw, Hermes, Aider, Goose, Cursor Agent, Qwen Code, Ollama, LM Studio, and llama.cpp.
 
-On Apple Silicon macOS, install and upgrade with the dedicated Homebrew Cask:
+## How It Works
+
+```text
+Agent machine                                      Viewer machine
++---------------------------------------------+    +---------------------+
+| AgentWatch desktop app                      |    | Any modern browser  |
+|                                             |    |                     |
+| Tray UI -> Rust monitor -> SQLite -> HTTP   |<---| LAN dashboard URL   |
++---------------------------------------------+    +---------------------+
+```
+
+The monitor binds to `0.0.0.0`, so the dashboard is available both locally and from other devices on the same LAN. AgentWatch does not require a cloud dashboard account.
+
+## Installation
+
+Download files only from the [latest AgentWatch release](https://github.com/donghwan0206/agentwatch/releases/latest).
+
+| OS | Recommended installation | Current prebuilt architecture |
+| --- | --- | --- |
+| macOS 11 or later | Homebrew Cask | Apple Silicon (`aarch64`) |
+| Windows | Setup executable | 64-bit (`x64`) |
+| Linux | AppImage | 64-bit (`amd64`) |
+
+### macOS
+
+#### Homebrew Cask (recommended)
+
+Install:
 
 ```bash
 brew install --cask donghwan0206/agentwatch/agentwatch
+```
+
+Upgrade:
+
+```bash
 brew upgrade --cask donghwan0206/agentwatch/agentwatch
 ```
 
-The [AgentWatch Homebrew Tap](https://github.com/donghwan0206/homebrew-agentwatch) checks for new releases every 15 minutes and pins each DMG SHA-256.
+Uninstall:
 
-macOS supports a checksum-verified terminal installer:
+```bash
+brew uninstall --cask donghwan0206/agentwatch/agentwatch
+```
+
+The [AgentWatch Homebrew tap](https://github.com/donghwan0206/homebrew-agentwatch) follows published releases and pins the DMG checksum.
+
+#### Terminal installer
+
+The installer downloads the latest app archive, verifies its SHA-256 checksum and bundle signature, installs it in `/Applications`, removes the download quarantine attribute, and launches AgentWatch.
 
 ```bash
 curl -fsSL https://github.com/donghwan0206/agentwatch/releases/latest/download/install-macos-app.sh | bash
 ```
 
-Alternatively, download the macOS DMG, drag AgentWatch to Applications, and follow [the manual Gatekeeper approval steps](docs/macos-installation.md). The no-cost macOS release is ad-hoc signed rather than Apple-notarized.
+#### DMG
 
-## Rust Headless Server
+1. Download `AgentWatch_<version>_aarch64.dmg` from the latest release.
+2. Open the DMG.
+3. Drag **AgentWatch** to the **Applications** shortcut.
+4. Start AgentWatch from Applications.
 
-The standalone Rust server is still available for development and advanced headless deployments. It is not required when you use the desktop tray app.
+The free macOS build is ad-hoc signed but is not Apple-notarized. Gatekeeper may require manual approval. See [macOS installation and Gatekeeper instructions](docs/macos-installation.md) for the exact steps.
 
-Install the JavaScript wrapper dependencies once:
+### Windows
+
+1. Download `AgentWatch_<version>_x64-setup.exe` from the latest release.
+2. Run the installer for the current user.
+3. Start AgentWatch from the Start menu.
+4. Use the AgentWatch icon in the notification area to reopen the dashboard or quit monitoring.
+
+The updater signature files published beside the installer are used by AgentWatch's updater. The installer is not currently Authenticode-signed, so Windows SmartScreen may show a warning. Confirm that the file came from the official GitHub release before choosing **More info > Run anyway**.
+
+Do not install a service-only package for normal desktop use. The Windows desktop installer already includes the background monitor and keeps it running while the dashboard is closed.
+
+### Linux
+
+1. Download `AgentWatch_<version>_amd64.AppImage` from the latest release.
+2. Make it executable.
+3. Launch it from your file manager or application launcher.
+
+For a first launch from a terminal:
 
 ```bash
-npm install
+chmod +x AgentWatch_*_amd64.AppImage
+./AgentWatch_*_amd64.AppImage
 ```
 
-Run the Rust monitor server:
+The tray icon requires a desktop environment with StatusNotifier/AppIndicator support. The packaged Linux release is currently built for `amd64` systems.
 
-```bash
-npm run dev
-```
+## First Run
 
-Build the release server binary:
+1. Launch AgentWatch on the machine that runs your agents.
+2. Open the dashboard from the tray or menu-bar icon.
+3. Open the **Port** menu to save a preferred port. AgentWatch uses `8765` by default and tries ports through `8799` when the preferred port is unavailable.
+4. Allow AgentWatch through the operating-system firewall if prompted.
+5. Copy the displayed **LAN URL** and open it on another device connected to the same network.
 
-```bash
-npm run build
-```
-
-The binary is written to:
+Example:
 
 ```text
-src-tauri/target/release/agentwatch-server
+http://192.168.1.25:8765
 ```
 
-Run it directly on the monitoring machine:
+`http://127.0.0.1:<port>` and `http://localhost:<port>` work only on the agent machine. Other devices must use the displayed LAN IP address.
+
+The dashboard defaults to the viewer browser's preferred language. Use the `EN`, `한국어`, `日本語`, or `中文` shortcuts in the header to override it for that browser.
+
+## Updates
+
+AgentWatch checks the GitHub release feed for desktop updates. Use either of these interfaces:
+
+- Open **Update** in the dashboard header.
+- Choose **Check for updates** or **Install update** from the tray menu.
+
+Homebrew users can also update explicitly with:
 
 ```bash
+brew upgrade --cask donghwan0206/agentwatch/agentwatch
+```
+
+If an in-app update is unavailable for a platform, install the newest package from the [latest release](https://github.com/donghwan0206/agentwatch/releases/latest).
+
+## Token Usage and Quota
+
+AgentWatch scans common local usage locations and lets you add provider-specific paths from the **Token log locations** panel.
+
+Default sources include:
+
+- **Codex:** `$CODEX_HOME` or `~/.codex`, including `logs_2.sqlite` and `sessions/**/*.jsonl`.
+- **Claude:** `$CLAUDE_CONFIG_DIR` or `~/.claude`, plus common Claude desktop and Claude Code locations.
+- **Gemini:** `$GEMINI_CONFIG_DIR` or `~/.gemini`, plus common Gemini desktop locations.
+
+Parsed token events are normalized into `~/.agentwatch/usage.sqlite`. Rescanning updates this cache incrementally instead of deleting previously collected history.
+
+Codex quota lookup uses the following sources in order:
+
+1. The ChatGPT usage endpoint with the existing local Codex authentication file.
+2. The installed Codex app-server interface when available.
+3. The newest rate-limit snapshot in local Codex SQLite or JSONL logs.
+
+Claude and Gemini token history can be collected from local logs, but their remaining quota may stay unavailable when those products do not expose a compatible local quota source. AgentWatch does not estimate missing quota values.
+
+## Data and Privacy
+
+AgentWatch reads local process metadata such as process name, command line, CPU, and memory. Sensitive command-line fields are redacted before display. It does not inspect prompts, replies, source files, terminal buffers, or project contents.
+
+Local files are stored under the current user's home directory:
+
+| Path | Purpose |
+| --- | --- |
+| `~/.agentwatch/config.json` | Saved port and custom usage-log paths |
+| `~/.agentwatch/agentwatch.sqlite3` | Activity snapshots and status-change history |
+| `~/.agentwatch/usage.sqlite` | Normalized daily token event cache |
+
+On Windows, `~` means the current `%USERPROFILE%` directory.
+
+Monitoring data is not uploaded to an AgentWatch service. Outbound HTTPS requests are limited to product functions such as Codex quota lookup through ChatGPT and application update checks through GitHub.
+
+## Configuration
+
+Most settings are available in the dashboard. Environment variables are intended for advanced or headless deployments.
+
+| Variable | Purpose |
+| --- | --- |
+| `AGENTWATCH_PORT` | Force the listening port for the current process |
+| `AGENTWATCH_DB` | Override the activity SQLite database path |
+| `CODEX_HOME` | Override the Codex data root |
+| `CLAUDE_CONFIG_DIR` | Override the Claude data root |
+| `GEMINI_CONFIG_DIR` | Override the Gemini data root |
+
+AgentWatch binds only within the configured host process and does not provide authentication. Use it on a trusted local network; do not expose its port directly to the public internet.
+
+## Advanced Headless Server
+
+The standalone Rust server is available for machines where a tray app is not appropriate. It is not required when using the desktop app.
+
+```bash
+npm ci
+npm run build:server
 src-tauri/target/release/agentwatch-server
 ```
 
-By default the server uses the saved `~/.agentwatch/config.json` port when present, otherwise it tries `8765` and falls back through `8799`. To force a port for that process:
+Set a fixed port when needed:
 
 ```bash
 AGENTWATCH_PORT=8876 src-tauri/target/release/agentwatch-server
 ```
 
-The server prints the local URL and the LAN URL shape. You can also check the selected port and detected LAN URLs with:
-
-```bash
-curl http://127.0.0.1:<selected-port>/api/runtime
-```
-
-Provider-level activity logs are available from the same browser API:
-
-```bash
-curl "http://127.0.0.1:<selected-port>/api/provider-history?minutes=180"
-```
-
-Then open this from another device on the same network:
-
-```text
-http://<agent-machine-ip>:<selected-port>
-```
-
-Create a service-only release folder for the current OS when you explicitly want the headless background server without a tray icon:
-
-```bash
-npm run package:local -- --assets release-assets
-npm run release:archive-service -- --input release-assets
-npm run release:readiness -- release-assets --service-only --automated-only --platform macos
-npm run release:status -- release-assets --service-only --platform macos
-```
-
-`package:local` packages the Rust monitor server and service/browser verification helpers only. It does not include the desktop tray app. For normal end-user installs, use the desktop release artifacts instead: on Windows, install `AgentWatch_<version>_x64-setup.exe` so AgentWatch stays in the notification area and opens the browser dashboard from the tray menu.
-The local packaging command also runs the headless smoke test, writes `lan-preflight-<platform>.json`, and includes `release-status.json` plus `release-status.md`, so automated readiness can prove the LAN browser endpoint is reachable before manual remote-client evidence exists.
-The archive command writes `agentwatch-service-release-<OS>.tar.gz` for copying to the agent machine when a headless deployment is explicitly needed. Service-only archives are local/advanced artifacts and are not uploaded to the public GitHub Release by default; tagged releases publish the desktop tray apps.
-Inside a service-only release folder, the equivalent status command is `node agentwatch-release-status.mjs . --service-only --platform macos`.
-
-## Run as a Service
-
-Build once, then install the Rust monitor as a user-level background service on the agent machine:
-
-```bash
-npm run build
-```
-
-macOS:
-
-```bash
-npm run service:install:mac
-npm run service:uninstall:mac
-```
-
-The macOS installer copies the server binary to `~/Library/Application Support/AgentWatch/agentwatch-server` and points the LaunchAgent there, avoiding protected workspace folders such as Documents.
-
-Linux with user systemd:
-
-```bash
-npm run service:install:linux
-npm run service:uninstall:linux
-```
-
-Windows PowerShell:
-
-```powershell
-npm run service:install:windows -- -StartNow
-npm run service:uninstall:windows
-```
-
-Use the first-run dashboard prompt to save the browser port, or set `AGENTWATCH_PORT` before installation only when you need an environment-level override. Set `AGENTWATCH_DB` to store SQLite data somewhere other than `~/.agentwatch/agentwatch.sqlite3`. The service runs under your user account so it can see the same local agent processes and Codex usage logs as an interactive session.
-
-Check whether the installed service and browser API are reachable:
-
-```bash
-npm run service:status
-npm run service:status -- --wait-ms 10000
-npm run service:status -- --url http://127.0.0.1:<selected-port> --json
-npm run verify:lan -- --url http://127.0.0.1:<selected-port>
-node agentwatch-service-status.mjs --url http://127.0.0.1:<selected-port>
-```
-
-The status command prints the service manager state, runtime, local URL, LAN URLs, current activity, and whether the current client is a real remote browser. Use `--wait-ms` immediately after installing or restarting the service so the command waits through the short startup window instead of failing on the first refused connection. The LAN preflight command checks that the service is bound to `0.0.0.0`, advertises a non-loopback LAN URL, responds through that LAN URL's `/healthz`, and serves current dashboard assets before you move to a second device.
-
-To generate the macOS LaunchAgent or Linux systemd user unit without registering it:
-
-```bash
-AGENTWATCH_SERVICE_DRY_RUN=1 npm run service:install:mac
-AGENTWATCH_SERVICE_DRY_RUN=1 npm run service:install:linux
-```
-
-After installing the service, write a JSON verification report:
-
-```bash
-npm run verify:service -- --url http://127.0.0.1:<selected-port> --report release-assets/service-verification-<platform>.json
-npm run verify:service -- --url http://127.0.0.1:<selected-port> --report release-assets/service-verification-<platform>.json --manual-result passed --manual-notes "Service starts on login, LAN URL works, and uninstall was checked."
-```
-
-Use `--skip-service-check` only when you want endpoint/UI verification before registering the background service. Use `--skip-lan-check` only for pre-LAN checks; final release evidence should include a passed LAN URL health check.
-
-From the browser/viewer machine on the same LAN, verify real remote access:
-
-```bash
-npm run verify:remote -- --url http://<agent-machine-ip>:<selected-port> --report release-assets/remote-client-verification-<platform>.json
-```
-
-From a downloaded release folder, use the platform wrapper on the viewer machine:
-
-```bash
-./verify-remote-macos.sh --url http://<agent-machine-ip>:<selected-port>
-./verify-remote-linux.sh --url http://<agent-machine-ip>:<selected-port>
-verify-remote-windows.cmd -Url http://<agent-machine-ip>:<selected-port>
-```
-
-The finalized release folder also includes `remote-verification.md`, which records copy-ready commands and the detected LAN URL when service evidence is already present.
-
-This checks the browser dashboard and API over the LAN URL. It rejects loopback targets by default and final release readiness accepts only reports from a different host than the agent machine.
-If the viewer machine only has a browser, open the LAN URL, click `검증 JSON` in the Remote Verify panel, then import the downloaded file from the source checkout:
-
-```bash
-npm run release:import-remote -- --report /path/to/remote-client-verification-<platform>.json --assets release-assets --platform <platform> --service-only
-npm run release:refresh -- release-assets --service-only --platform <platform> --check
-```
-
-To verify uninstall and reinstall recovery on the current OS:
-
-```bash
-npm run verify:service:lifecycle -- --yes --url http://127.0.0.1:<selected-port> --report release-assets/service-lifecycle-<platform>.json
-```
-
-When `verify:service` writes `release-assets/service-verification-<platform>.json`, it automatically reads the matching lifecycle report and marks `uninstallClean` as passed if uninstall/reinstall recovery was proven.
-
-For final service-only release readiness, run:
-
-```bash
-npm run release:readiness -- release-assets --service-only --platform macos
-```
-
-Use `--platform windows` or `--platform linux` on those systems, or omit `--platform` when the release folder contains all three platforms. That gate requires the headless Rust binary, release manifest, performance evidence, passed service report, passed lifecycle report, and a passed remote browser report. It intentionally does not require a Tauri desktop app or tray screenshot.
-
-## Packaging Scope
-
-The supported end-user deployment path is the desktop tray app plus the browser dashboard it serves over LAN. The service-only archive remains available for headless deployments and intentionally has no tray icon. Tagged GitHub releases produce the tray-app installers by default; use `npm run package:desktop-local -- ...` for local desktop packaging.
-
-See [docs/packaging.md](docs/packaging.md) for desktop and service package paths and release checks.
-
-`npm test` checks the Rust server, browser UI smoke path, service release helpers, Python compatibility tests, and Rust unit tests.
-
-## Python Development Server
-
-```bash
-python3 agent_monitor.py --host 0.0.0.0 --port 8765
-```
-
-Open one of the printed URLs from a browser. From another device, use the LAN URL:
-
-```text
-http://<agent-machine-ip>:<selected-port>
-```
-
-The Rust server uses the same URL shape. If it had to fall back because `8765` was busy, use the selected port printed by the process or reported by `/api/runtime`.
+See [the service quickstart](docs/service-quickstart.md) for macOS LaunchAgent, Linux systemd user service, and Windows Scheduled Task instructions. See [packaging documentation](docs/packaging.md) for the distinction between desktop and service-only artifacts.
 
 ## API
 
-- `GET /api/runtime` - selected port, local URL, LAN URLs, bind host, platform, runtime, version, and `trayEnabled: false` for the service runtime.
-- `GET /api/snapshot` - current provider and activity state.
-- `GET /api/history?minutes=180` - recent activity score snapshots.
-- `GET /api/events?limit=100` - status transition log.
-- `GET /api/usage?days=366` - Codex quota, daily token usage, and recent thread token totals.
-- `GET /healthz` - service health check.
+The embedded and headless Rust servers expose the same local HTTP API:
 
-## Data
+- `GET /api/runtime` - runtime, selected port, local URL, LAN URLs, platform, and version.
+- `GET /api/snapshot` - current provider and process activity.
+- `GET /api/history?minutes=180` - recent aggregate activity.
+- `GET /api/provider-history?minutes=180` - recent activity grouped by provider.
+- `GET /api/events?limit=100` - recent status transitions.
+- `GET /api/usage?days=366` - quota, daily token history, goals, and recent Codex thread totals.
+- `GET /api/usage-locations` - detected and configured token-log locations.
+- `GET /healthz` - health check.
 
-The Rust server writes activity snapshots and status-change events to:
+## Development
 
-```text
-~/.agentwatch/agentwatch.sqlite3
-```
+Prerequisites:
 
-Override it with:
+- Node.js 22
+- Stable Rust toolchain
+- Python 3 for compatibility tests
+- The platform prerequisites required by Tauri 2
+
+Install dependencies and run the desktop app:
 
 ```bash
-AGENTWATCH_DB=/path/to/agentwatch.sqlite3 npm run dev
+npm ci
+npm run dev:app
 ```
 
-The Python development server default database lives at:
+Run only the headless Rust server:
 
-```text
-data/agentwatch.sqlite3
+```bash
+npm run dev:server
 ```
 
-Both database paths are ignored by Git. Override the Python server path with `--db`.
-
-## Detection
-
-AgentWatch detects command lines containing known CLI/app identifiers:
-
-- OpenAI Codex
-- Claude Code
-- Gemini CLI
-- ChatGPT
-- OpenCode
-- OpenClaw
-- Hermes
-
-Detection is deliberately conservative and based on local process metadata. The Rust implementation keeps the active patterns in `src-tauri/src/monitor.rs`; the Python server remains as a development reference in `agent_monitor.py`.
-
-## Usage and Quota
-
-Codex usage is read from local Codex SQLite logs when present:
-
-- `~/.codex/logs_2.sqlite` for rate-limit snapshots and per-turn token events.
-- `~/.codex/state_5.sqlite` for thread-level cumulative token totals.
-- `~/.codex/goals_1.sqlite` for active Codex goal token usage and token-budget remaining values when a budget exists.
-
-Quota values only appear when Codex has emitted a local `codex.rate_limits` event. If that event is not present yet, the dashboard keeps the token grass and goal/thread token cards visible and shows quota as unavailable instead of guessing. Goal remaining tokens are shown only when the Codex goal has an explicit token budget; unbounded goals show used tokens without fabricating a remaining value.
-
-## Test
+Run the test suite:
 
 ```bash
 npm test
 ```
 
-This runs the Python regression tests, Rust tests, server smoke contracts, and service release checks.
-
-After building the Rust server, run the browser/API smoke test:
+Build a platform package on its matching operating system:
 
 ```bash
-npm run smoke:headless
+npm run build:mac:release
+npm run build:windows
+npm run build:linux
 ```
 
-`smoke:headless` launches the standalone Rust monitor server, checks `/healthz`, `/api/runtime`, `/api/snapshot`, `/api/history`, verifies that `/`, `/app.js`, and `/styles.css` load for the browser UI, verifies SQLite log creation, and then stops the process. It reports `runtime: "rust-headless"` and `trayEnabled: false`, choosing a free port from `8893` to `8933` unless `AGENTWATCH_HEADLESS_SMOKE_PORT` is set.
-
-For a local runtime performance snapshot:
-
-```bash
-npm run bench:runtime
-npm run bench:headless
-npm run bench:python
-npm run bench:report:service -- release-assets
-```
-
-The benchmarks launch the Rust server and the Python development server on isolated ports, then report startup time, API response latency, RSS memory, detected activity status, and active process count. The headless server is the relevant comparison for the browser-only deployment.
+The browser UI lives in `static/`, the Rust/Tauri application in `src-tauri/`, release tooling in `scripts/`, and advanced release documentation in `docs/`.
